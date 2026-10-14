@@ -1,0 +1,9 @@
+package-as: UlSource
+
+ignore:
+  - .pkgmeta
+  - .gitignore
+  - .github
+  - README.md
+  - .curseforge.json
+  - tools
