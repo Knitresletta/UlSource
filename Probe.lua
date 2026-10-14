@@ -10,26 +10,29 @@
 --
 -- Per loot window it stores: the event arguments, every slot (info, link,
 -- type, sources), the player's map position, zone texts, the current
--- target, whether the client calls it fishing loot, the last spell the
--- player cast (the gathering spell that opened a node), and the last kills
--- seen in the combat log. Each read is wrapped in pcall and each value in
+-- target, whether the client calls it fishing loot, and the last spell the
+-- player cast (the gathering spell that opened a node). Each read is
+-- wrapped in pcall and each value in
 -- UlSource.Plain, so a secret value or a missing function is recorded as
 -- such instead of breaking the window.
 --
--- Kill counting is probed two ways, because the Midnight restrictions
--- Forever runs with may hide enemy data in the combat log: PARTY_KILL and
--- UNIT_DIED from COMBAT_LOG_EVENT_UNFILTERED, with a count of how many of
--- those arrived with secret GUIDs. If the combat log turns out useless, the
--- loot windows themselves (one per corpse) are the fallback denominator.
+-- The combat log is not available: on this client (build 70374)
+-- RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED") is refused with
+-- ADDON_ACTION_FORBIDDEN and CombatLogGetCurrentEventInfo does not exist
+-- (probe 0.1.0, 15.10.2026). Kills therefore cannot be counted; the loot
+-- windows themselves (one per corpse) are the denominator for drop rates.
+--
+-- With auto loot on, Blizzard's loot frame empties the window on
+-- LOOT_READY, which fires before LOOT_OPENED, so by LOOT_OPENED the
+-- window has zero slots (probe 0.1.0). The record is therefore taken on
+-- LOOT_READY, and LOOT_OPENED only adds what it saw to the same record.
 
 local MAX_LOOTS = 400     -- oldest records are dropped beyond this
-local MAX_KILLS = 30      -- ring of recent kills kept for context
 local CAST_WINDOW = 30    -- seconds; older casts are still stored, with their age
 
 local db                  -- UlSourceDB.probe
 local playerGUID
 local lastCast            -- { spellID, name, at, castGUID }
-local kills = {}          -- newest last
 local current             -- the loot record for the open window
 local lastError
 
@@ -141,18 +144,6 @@ local function ReadLastCast()
     }
 end
 
-local function ReadRecentKills()
-    local out = {}
-    local now = GetTime()
-    for i = math.max(1, #kills - 4), #kills do
-        local k = kills[i]
-        if k then
-            out[#out + 1] = { event = k.event, guid = k.guid, name = k.name, age = math.floor((now - k.at) * 10) / 10 }
-        end
-    end
-    return out
-end
-
 ------------------------------------------------------------------------
 -- Loot slots
 ------------------------------------------------------------------------
@@ -208,10 +199,12 @@ end
 -- Events
 ------------------------------------------------------------------------
 
-local function OnLootOpened(autoLoot, isFromItem)
+-- One record per loot window, taken on the first event that announces it.
+local function Record(source, autoLoot, isFromItem)
     local rec = {
         n = (db.count or 0) + 1,
         at = date("%Y-%m-%d %H:%M:%S"),
+        source = source,
         autoLoot = Plain(autoLoot),
         isFromItem = Plain(isFromItem),
         inCombat = Plain(InCombatLockdown and InCombatLockdown()),
@@ -221,9 +214,9 @@ local function OnLootOpened(autoLoot, isFromItem)
         zone = Try("zone", ReadZone),
         target = Try("target", ReadUnit, "target"),
         lastCast = ReadLastCast(),
-        recentKills = ReadRecentKills(),
         slots = {},
         taken = {},
+        t0 = GetTime(),
     }
     if IsFishingLoot then rec.fishing = Plain(Try("IsFishingLoot", IsFishingLoot)) end
     if GetNumLootItems then rec.numItems = Plain(Try("GetNumLootItems", GetNumLootItems)) end
@@ -248,10 +241,30 @@ local function OnLootOpened(autoLoot, isFromItem)
         local pos = rec.position or {}
         local xy = (type(pos.x) == "number" and type(pos.y) == "number")
             and string.format(" %.1f,%.1f", pos.x * 100, pos.y * 100) or ""
-        UlSource.Say("loot #" .. rec.n .. ": " .. n .. " slot(s), " .. where .. who
+        UlSource.Say("loot #" .. rec.n .. " (" .. source .. "): " .. n .. " slot(s), " .. where .. who
             .. ", " .. tostring(pos.mapName or "?") .. xy
             .. (rec.lastCast and rec.lastCast.recent and (", after " .. tostring(rec.lastCast.name)) or ""))
     end
+    return rec
+end
+
+local function OnLootReady(autoLoot)
+    Record("LOOT_READY", autoLoot, nil)
+end
+
+local function OnLootOpened(autoLoot, isFromItem)
+    -- LOOT_READY just made the record for this window: note what the
+    -- window looks like now (with auto loot it is usually empty already).
+    if current and current.source == "LOOT_READY" and GetTime() - current.t0 < 3 then
+        current.opened = {
+            autoLoot = Plain(autoLoot),
+            isFromItem = Plain(isFromItem),
+            numItems = GetNumLootItems and Plain(Try("GetNumLootItems", GetNumLootItems)) or nil,
+            after = math.floor((GetTime() - current.t0) * 1000) / 1000,
+        }
+        return
+    end
+    Record("LOOT_OPENED", autoLoot, isFromItem)
 end
 
 local function OnLootSlotCleared(slot)
@@ -277,29 +290,6 @@ local function OnSpellcast(unit, castGUID, spellID)
         name = GetSpellInfo(spellID)
     end
     lastCast = { spellID = Plain(spellID), name = Plain(name), at = GetTime(), castGUID = Plain(castGUID) }
-end
-
-local function OnCombatLog()
-    if not CombatLogGetCurrentEventInfo then
-        db.combatLog.note = "no CombatLogGetCurrentEventInfo"
-        return
-    end
-    local _, subevent, _, sourceGUID, sourceName, _, _, destGUID, destName = CombatLogGetCurrentEventInfo()
-    if issecretvalue and issecretvalue(subevent) then
-        db.combatLog.secretSubevents = (db.combatLog.secretSubevents or 0) + 1
-        return
-    end
-    if subevent ~= "PARTY_KILL" and subevent ~= "UNIT_DIED" then return end
-    local c = db.combatLog
-    c[subevent] = (c[subevent] or 0) + 1
-    local secret = issecretvalue and (issecretvalue(destGUID) or issecretvalue(destName))
-    if secret then c.secretDest = (c.secretDest or 0) + 1 end
-    if subevent == "PARTY_KILL" then
-        local mine = (not (issecretvalue and issecretvalue(sourceGUID))) and sourceGUID == playerGUID
-        if mine then c.myKills = (c.myKills or 0) + 1 end
-    end
-    kills[#kills + 1] = { event = subevent, guid = ParseGUID(destGUID), name = Plain(destName), at = GetTime() }
-    while #kills > MAX_KILLS do table.remove(kills, 1) end
 end
 
 ------------------------------------------------------------------------
@@ -341,10 +331,7 @@ function UlSource.ProbeSummary()
     if not db then return end
     UlSource.Say("probe: " .. #db.loots .. " loot windows stored (" .. (db.count or 0) .. " seen, "
         .. (db.dropped or 0) .. " dropped), " .. #(db.errors or {}) .. " probe errors.")
-    local c = db.combatLog
-    print("  combat log: PARTY_KILL " .. (c.PARTY_KILL or 0) .. " (mine " .. (c.myKills or 0) .. "), UNIT_DIED "
-        .. (c.UNIT_DIED or 0) .. ", with secret target " .. (c.secretDest or 0)
-        .. ", secret subevents " .. (c.secretSubevents or 0) .. (c.note and (", " .. c.note) or ""))
+    print("  combat log: " .. tostring(db.combatLog and db.combatLog.note))
     local missing = {}
     for name, kind in pairs(db.api or {}) do
         if kind == "nil" then missing[#missing + 1] = name end
@@ -390,11 +377,9 @@ end
 function UlSource.ProbeReset()
     if not db then return end
     wipe(db.loots)
-    wipe(db.combatLog)
     db.errors = nil
     db.count = 0
     db.dropped = 0
-    wipe(kills)
     UlSource.Say("probe data forgotten.")
 end
 
@@ -406,7 +391,7 @@ function UlSource.ProbeInit()
     UlSource.db.probe = UlSource.db.probe or {}
     db = UlSource.db.probe
     db.loots = db.loots or {}
-    db.combatLog = db.combatLog or {}
+    db.combatLog = { note = "not available: RegisterEvent(COMBAT_LOG_EVENT_UNFILTERED) is forbidden on this client and CombatLogGetCurrentEventInfo is nil (probe 0.1.0, build 70374)" }
     db.count = db.count or 0
     db.version = UlSource.Version()
     db.api = Try("api inventory", InventoryAPI)
@@ -415,10 +400,10 @@ end
 
 local frame = CreateFrame("Frame", "UlSourceProbeFrame")
 frame:RegisterEvent("PLAYER_LOGIN")
+frame:RegisterEvent("LOOT_READY")
 frame:RegisterEvent("LOOT_OPENED")
 frame:RegisterEvent("LOOT_SLOT_CLEARED")
 frame:RegisterEvent("LOOT_CLOSED")
-frame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 if not pcall(frame.RegisterUnitEvent, frame, "UNIT_SPELLCAST_SUCCEEDED", "player") then
     frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
 end
@@ -429,7 +414,9 @@ frame:SetScript("OnEvent", function(self, event, ...)
         return
     end
     if not db then return end   -- ADDON_LOADED has not run yet
-    if event == "LOOT_OPENED" then
+    if event == "LOOT_READY" then
+        Try("LOOT_READY", OnLootReady, ...)
+    elseif event == "LOOT_OPENED" then
         Try("LOOT_OPENED", OnLootOpened, ...)
     elseif event == "LOOT_SLOT_CLEARED" then
         Try("LOOT_SLOT_CLEARED", OnLootSlotCleared, ...)
@@ -437,11 +424,5 @@ frame:SetScript("OnEvent", function(self, event, ...)
         Try("LOOT_CLOSED", OnLootClosed)
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
         Try("UNIT_SPELLCAST_SUCCEEDED", OnSpellcast, ...)
-    elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
-        local ok, err = pcall(OnCombatLog)
-        if not ok then
-            db.combatLog.errors = (db.combatLog.errors or 0) + 1
-            db.combatLog.lastError = tostring(err)
-        end
     end
 end)

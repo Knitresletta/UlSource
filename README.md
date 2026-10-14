@@ -4,7 +4,7 @@ Where did this come from? An addon for **World of Warcraft: Forever** that recor
 
 A separate addon from [UlRemedyForever](https://github.com/Knitresletta/UlRemedyForever). Same author, same style, no shared code. UlRemedyForever is a set of small fixes that remember nothing; UlSource is a database that grows every time you loot.
 
-> **Status:** probe build 0.1.0, collects raw loot data and nothing else. Target client: Forever beta (build 1.60.1, interface `16001`).
+> **Status:** probe build 0.1.1, collects raw loot data and nothing else. Target client: Forever beta (build 1.60.1, interface `16001`).
 
 ## Why
 
@@ -30,7 +30,7 @@ Forever has no trustworthy drop database. Wowhead and the old Classic databases 
 |---|---|---|---|
 | Collector | Listens to the loot window opening, reads every slot and its source | `LOOT_OPENED`, `LOOT_SLOT_CLEARED`, `GetLootSourceInfo`, `GetLootSlotInfo`, `C_Map.GetPlayerMapPosition` | Nothing directly, hands records to Store |
 | Source resolver | Turns a loot source GUID into "mob 1234 Murloc Scout" or "node 5678 Peacebloom" | The GUID string (type and ID are in it), `UNIT_SPELLCAST_SUCCEEDED` for the gathering spell that opened a node | Nothing |
-| Kill counter | Counts kills and node openings so the drop rate has a denominator | `COMBAT_LOG_EVENT_UNFILTERED` (`UNIT_DIED` for your kills), the same gathering spell event | Counters in Store |
+| Kill counter | Counts looted corpses and node openings so the drop rate has a denominator | The loot windows themselves, one per corpse or node (the combat log is closed to addons on Forever, see below) | Counters in Store |
 | Store | The database, one entry per item with a list of sources and counts | SavedVariables `UlSourceDB` | SavedVariables only |
 | Tooltip | Adds the lines to the item tooltip | `TooltipDataProcessor` (Forever runs the retail 12.x tooltip code, not the Classic `OnTooltipSetItem` hook) | Nothing |
 | Options and slash | `/us` to list, clear and toggle | `UlSourceDB.settings` | Settings |
@@ -51,9 +51,18 @@ These must be probed in-game before the data model is drawn, in the same way the
 
 A probe build with no UI: on every loot window, write the raw slot info, source GUIDs, player position and the last gathering spell to `UlSourceDB.probe`, then read the file after a session of killing and gathering. That answers questions 1 to 4 with real data before any design is locked.
 
+## What the probe has found so far
+
+Build 1.60.1.70374, 15.10.2026:
+
+- **The combat log is closed to addons.** `RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")` is refused with `ADDON_ACTION_FORBIDDEN` (the "blocked from an action only available to the Blizzard UI" popup) and `CombatLogGetCurrentEventInfo` does not exist. This is the Midnight restriction Forever runs with. Kills cannot be counted, so the denominator for drop rates is looted corpses, which is what the loot window gives anyway.
+- **Auto loot empties the window before `LOOT_OPENED`.** With auto loot on, Blizzard's loot frame takes everything on `LOOT_READY`, which fires first; `LOOT_OPENED` then reports zero slots. The probe records on `LOOT_READY` since 0.1.1.
+- **These exist:** `GetLootSourceInfo`, `GetLootSlotInfo`, `GetLootSlotLink`, `GetLootSlotType`, `GetLootInfo`, `IsFishingLoot`, `C_Map.GetPlayerMapPosition` (works, map 1413 The Barrens), `TooltipDataProcessor.AddTooltipPostCall`, `issecretvalue`, `canaccessvalue`. **These do not:** the global `GetItemInfo` and `GetSpellInfo` (use `C_Item` and `C_Spell`), `C_LootHistory.GetNumItems`.
+- A creature GUID looks like `Creature-0-4615-1-3278-4128-00004FF037`: the sixth field is the NPC ID (4128, Hecklefang Stalker).
+
 ## Probe build (0.1.x)
 
-The current version has no tooltip and no database. It records every loot window, raw, to `UlSourceDB.probe` in the saved variables file (`WTF/Account/<account>/SavedVariables/UlSource.lua`): the event arguments, every slot with its source GUIDs, map position, zone, target, whether the client calls it fishing loot, the last spell you cast (the gathering spell that opened a node), and the last kills seen in the combat log. Values the client hides as secret are stored as `<secret>`, missing functions as `no <name>`, so the file says exactly what Forever gives an addon. The last 400 loot windows are kept.
+The current version has no tooltip and no database. It records every loot window, raw, to `UlSourceDB.probe` in the saved variables file (`WTF/Account/<account>/SavedVariables/UlSource.lua`): the event arguments, every slot with its source GUIDs, map position, zone, target, whether the client calls it fishing loot, and the last spell you cast (the gathering spell that opened a node). Values the client hides as secret are stored as `<secret>`, missing functions as `no <name>`, so the file says exactly what Forever gives an addon. The last 400 loot windows are kept.
 
 | Command | Description |
 |---------|-------------|
