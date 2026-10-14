@@ -4,7 +4,7 @@ Where did this come from? An addon for **World of Warcraft: Forever** that recor
 
 A separate addon from [UlRemedyForever](https://github.com/Knitresletta/UlRemedyForever). Same author, same style, no shared code. UlRemedyForever is a set of small fixes that remember nothing; UlSource is a database that grows every time you loot.
 
-> **Status:** probe build 0.1.2, collects raw loot data and nothing else. Target client: Forever beta (build 1.60.1, interface `16001`).
+> **Status:** probe build 0.1.3, collects raw loot data and nothing else. Target client: Forever beta (build 1.60.1, interface `16001`).
 
 ## Why
 
@@ -77,30 +77,24 @@ The current version has no tooltip and no database. It records every loot window
 
 To answer the open questions, one session should include: killing and looting a few mobs (some looted while still in combat), herbs, ore, a fishing cast, skinning a corpse, and opening a chest. Then log out or `/reload` so the file is written, and read it.
 
-## Minimap button and the Ul hub (planned)
+## Minimap button (planned)
 
-UlSource gets the one and only Ul minimap button. Left-click opens UlSource's own window. Right-click opens a menu with one row per installed Ul addon, so UlRemedyForever's options are reachable from the same button without UlRemedyForever having a button of its own.
-
-**How the siblings get in:** a registry owned by UlSource. Each Ul addon, at `PLAYER_LOGIN`, does
+UlSource has no minimap button of its own. UlRemedyForever is the master addon and owns the one Ul minimap button: left-click opens its options, right-click opens a menu with one row per installed Ul addon. UlSource registers itself into that menu at `PLAYER_LOGIN`:
 
 ```lua
-if UlSource and UlSource.Register then
-    UlSource.Register({
-        id = "UlRemedyForever",
-        title = "UlRemedy Forever",
-        icon = "Interface\\AddOns\\UlRemedyForever\\media\\icon",
-        open = UlRemedy.ToggleOptions,
+if UlRemedy and UlRemedy.Register then
+    UlRemedy.Register({
+        id = "UlSource",
+        title = "UlSource",
+        icon = "Interface\\AddOns\\UlSource\\media\\icon",
+        open = UlSource.ToggleWindow,
     })
 end
 ```
 
-and nothing more. The guard means a sibling works exactly as today when UlSource is not installed: slash commands only, no button. UlSource never needs a new release when a new Ul addon appears, because it knows nothing about them; they announce themselves.
+and nothing more. The guard means UlSource works exactly the same when UlRemedyForever is not installed: slash commands only, no button.
 
-**Dependency direction:** siblings depend on UlSource, optionally. UlSource depends on nobody. The sibling's TOC gets `## OptionalDeps: UlSource` so the client loads UlSource first when both are present (without it the load order is alphabetical, and `UlRemedyForever` sorts before `UlSource`). Registering at `PLAYER_LOGIN` rather than at file load is the second safety net: by then every addon is loaded regardless of order. This is a new line in UlRemedyForever's TOC and a new global, `UlSource`, read by UlRemedyForever. Nothing else crosses between them: no shared code, no shared saved variables.
-
-**The button itself:** own code, no LibDBIcon or LibDataBroker, same rule as everything else here. A round button with the addon icon and Blizzard's tracking border texture, placed on the minimap's edge at an angle saved in `UlSourceDB.settings.minimap`. Drag moves it around the ring, a setting hides it. Forever's minimap is the retail `MinimapCluster`, so the radius comes from `Minimap:GetWidth()`, and the shape (round or square) from `GetMinimapShape` when another addon defines it. Hovering shows a tooltip listing the registered addons.
-
-**To probe before building:** `MenuUtil.CreateContextMenu` (the retail 12.x menu API) for the right-click menu, and whether the minimap button can be anchored and dragged in combat (it is our own unprotected frame, so it should be fine, but Forever has surprised before).
+**Dependency:** UlSource reads one global, `UlRemedy`, and only if it exists. The TOC gets `## OptionalDeps: UlRemedyForever` so the load order is explicit (it is alphabetical anyway, and `UlRemedyForever` sorts first). No shared code, no shared saved variables. The button, the menu and the registry live in UlRemedyForever and are described there. UlDungeonCompanion registers the same way, so the menu has all three.
 
 ## Development
 

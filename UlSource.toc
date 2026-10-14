@@ -2,7 +2,7 @@
 ## Title: UlSource
 ## Notes: Records where your materials come from (mob drops and gathering nodes) and shows it in the item tooltip. Probe build: collects raw loot data only.
 ## Author: knitresletta
-## Version: 0.1.2
+## Version: 0.1.3
 ## Category: Knitresletta
 ## IconTexture: Interface\AddOns\UlSource\media\icon
 ## SavedVariables: UlSourceDB

@@ -125,6 +125,24 @@ local function ReadZone()
     }
 end
 
+-- Group context, so group loot in a dungeon can be told from solo loot.
+local function ReadGroup()
+    local rec = {}
+    if GetLootMethod then
+        local method, masterParty, masterRaid = GetLootMethod()
+        rec.method = Plain(method)
+        rec.master = Plain(masterParty or masterRaid)
+    end
+    if GetNumGroupMembers then rec.members = Plain(GetNumGroupMembers()) end
+    if IsInInstance then
+        local inInstance, kind = IsInInstance()
+        rec.inInstance = Plain(inInstance)
+        rec.instanceType = Plain(kind)
+    end
+    if GetLootThreshold then rec.threshold = Plain(GetLootThreshold()) end
+    return rec
+end
+
 local function ReadUnit(unit)
     if not UnitExists or not UnitExists(unit) then return nil end
     local guid = UnitGUID and UnitGUID(unit)
@@ -221,6 +239,7 @@ local function Record(source, autoLoot, isFromItem)
         position = Try("position", ReadPosition),
         zone = Try("zone", ReadZone),
         target = Try("target", ReadUnit, "target"),
+        group = Try("group", ReadGroup),
         lastCast = ReadLastCast(),
         slots = {},
         taken = {},
