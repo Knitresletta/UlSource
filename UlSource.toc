@@ -1,0 +1,10 @@
+## Interface: 16001
+## Title: UlSource
+## Notes: Records where your materials come from (mob drops and gathering nodes) and shows it in the item tooltip. Probe build: collects raw loot data only.
+## Author: knitresletta
+## Version: 0.1.0
+## Category: Knitresletta
+## SavedVariables: UlSourceDB
+
+Core.lua
+Probe.lua

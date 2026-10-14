@@ -4,7 +4,7 @@ Where did this come from? An addon for **World of Warcraft: Forever** that recor
 
 A separate addon from [UlRemedyForever](https://github.com/Knitresletta/UlRemedyForever). Same author, same style, no shared code. UlRemedyForever is a set of small fixes that remember nothing; UlSource is a database that grows every time you loot.
 
-> **Status:** idea stage, nothing built yet. Target client: Forever beta (build 1.60.1, interface `16001`).
+> **Status:** probe build 0.1.0, collects raw loot data and nothing else. Target client: Forever beta (build 1.60.1, interface `16001`).
 
 ## Why
 
@@ -50,6 +50,20 @@ These must be probed in-game before the data model is drawn, in the same way the
 ## First step
 
 A probe build with no UI: on every loot window, write the raw slot info, source GUIDs, player position and the last gathering spell to `UlSourceDB.probe`, then read the file after a session of killing and gathering. That answers questions 1 to 4 with real data before any design is locked.
+
+## Probe build (0.1.x)
+
+The current version has no tooltip and no database. It records every loot window, raw, to `UlSourceDB.probe` in the saved variables file (`WTF/Account/<account>/SavedVariables/UlSource.lua`): the event arguments, every slot with its source GUIDs, map position, zone, target, whether the client calls it fishing loot, the last spell you cast (the gathering spell that opened a node), and the last kills seen in the combat log. Values the client hides as secret are stored as `<secret>`, missing functions as `no <name>`, so the file says exactly what Forever gives an addon. The last 400 loot windows are kept.
+
+| Command | Description |
+|---------|-------------|
+| `/us probe` | What has been recorded: loot windows, kill events and how many had secret data, missing API |
+| `/us last` | Print the last loot window in full |
+| `/us quiet` | Toggle the one-line chat note per loot window |
+| `/us probereset` | Forget all probe data |
+| `/us errors` | Save this session's Lua errors and blocked actions to the saved variables (also done on logout and reload) |
+
+To answer the open questions, one session should include: killing and looting a few mobs (some looted while still in combat), herbs, ore, a fishing cast, skinning a corpse, and opening a chest. Then log out or `/reload` so the file is written, and read it.
 
 ## Development
 
