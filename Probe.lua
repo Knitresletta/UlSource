@@ -26,6 +26,10 @@
 -- LOOT_READY, which fires before LOOT_OPENED, so by LOOT_OPENED the
 -- window has zero slots (probe 0.1.0). The record is therefore taken on
 -- LOOT_READY, and LOOT_OPENED only adds what it saw to the same record.
+-- Seen so far (0.1.1): GetLootSourceInfo gives "Creature-...-<npcID>-..."
+-- for corpses and "GameObject-...-<objectID>-..." for herb nodes, with the
+-- Herbalism cast (3570) 0 s before. No secret values yet, in or out of
+-- combat.
 
 local MAX_LOOTS = 400     -- oldest records are dropped beyond this
 local CAST_WINDOW = 30    -- seconds; older casts are still stored, with their age
@@ -182,7 +186,11 @@ local function ReadSlot(slot)
     end
     if GetLootSlotLink then
         local ok, link = pcall(GetLootSlotLink, slot)
-        rec.link = ok and Plain(link) or ("error: " .. tostring(link))
+        if ok then
+            rec.link = link == nil and "nil" or Plain(link)   -- nil for money slots
+        else
+            rec.link = "error: " .. tostring(link)
+        end
         if ok and type(link) == "string" then
             rec.itemID = tonumber(link:match("item:(%d+)"))
         end
@@ -248,7 +256,19 @@ local function Record(source, autoLoot, isFromItem)
     return rec
 end
 
+-- LOOT_READY fires twice per window on this client: once before
+-- LOOT_OPENED and once about a quarter second after it (probe 0.1.1). The
+-- second one is noted on the record that is already open, not recorded
+-- again, so one window stays one record.
 local function OnLootReady(autoLoot)
+    if current and not current.closedAt and GetTime() - current.t0 < 1.5 then
+        current.readyAgain = {
+            autoLoot = Plain(autoLoot),
+            numItems = GetNumLootItems and Plain(Try("GetNumLootItems", GetNumLootItems)) or nil,
+            after = math.floor((GetTime() - current.t0) * 1000) / 1000,
+        }
+        return
+    end
     Record("LOOT_READY", autoLoot, nil)
 end
 

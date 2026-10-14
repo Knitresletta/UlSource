@@ -4,7 +4,7 @@ Where did this come from? An addon for **World of Warcraft: Forever** that recor
 
 A separate addon from [UlRemedyForever](https://github.com/Knitresletta/UlRemedyForever). Same author, same style, no shared code. UlRemedyForever is a set of small fixes that remember nothing; UlSource is a database that grows every time you loot.
 
-> **Status:** probe build 0.1.1, collects raw loot data and nothing else. Target client: Forever beta (build 1.60.1, interface `16001`).
+> **Status:** probe build 0.1.2, collects raw loot data and nothing else. Target client: Forever beta (build 1.60.1, interface `16001`).
 
 ## Why
 
@@ -57,6 +57,9 @@ Build 1.60.1.70374, 15.10.2026:
 
 - **The combat log is closed to addons.** `RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")` is refused with `ADDON_ACTION_FORBIDDEN` (the "blocked from an action only available to the Blizzard UI" popup) and `CombatLogGetCurrentEventInfo` does not exist. This is the Midnight restriction Forever runs with. Kills cannot be counted, so the denominator for drop rates is looted corpses, which is what the loot window gives anyway.
 - **Auto loot empties the window before `LOOT_OPENED`.** With auto loot on, Blizzard's loot frame takes everything on `LOOT_READY`, which fires first; `LOOT_OPENED` then reports zero slots. The probe records on `LOOT_READY` since 0.1.1.
+- **`LOOT_READY` fires twice per window**, once before `LOOT_OPENED` and once about a quarter second after it. Since 0.1.2 the second one is noted on the open record instead of starting a new one.
+- **`GetLootSourceInfo` works** and gives one GUID and quantity per slot. A corpse gives `Creature-0-4615-1-3278-3456-...` (NPC ID 3456, Razormane Pathfinder), an herb node gives `GameObject-0-4615-1-3278-3730-...` (object ID 3730, a Bruiseweed node), with the Herbalism cast (spell 3570) recorded 0 s before. Money slots have `GetLootSlotType` 2 and no link.
+- **No secret values seen yet**, in or out of combat.
 - **These exist:** `GetLootSourceInfo`, `GetLootSlotInfo`, `GetLootSlotLink`, `GetLootSlotType`, `GetLootInfo`, `IsFishingLoot`, `C_Map.GetPlayerMapPosition` (works, map 1413 The Barrens), `TooltipDataProcessor.AddTooltipPostCall`, `issecretvalue`, `canaccessvalue`. **These do not:** the global `GetItemInfo` and `GetSpellInfo` (use `C_Item` and `C_Spell`), `C_LootHistory.GetNumItems`.
 - A creature GUID looks like `Creature-0-4615-1-3278-4128-00004FF037`: the sixth field is the NPC ID (4128, Hecklefang Stalker).
 
@@ -73,6 +76,31 @@ The current version has no tooltip and no database. It records every loot window
 | `/us errors` | Save this session's Lua errors and blocked actions to the saved variables (also done on logout and reload) |
 
 To answer the open questions, one session should include: killing and looting a few mobs (some looted while still in combat), herbs, ore, a fishing cast, skinning a corpse, and opening a chest. Then log out or `/reload` so the file is written, and read it.
+
+## Minimap button and the Ul hub (planned)
+
+UlSource gets the one and only Ul minimap button. Left-click opens UlSource's own window. Right-click opens a menu with one row per installed Ul addon, so UlRemedyForever's options are reachable from the same button without UlRemedyForever having a button of its own.
+
+**How the siblings get in:** a registry owned by UlSource. Each Ul addon, at `PLAYER_LOGIN`, does
+
+```lua
+if UlSource and UlSource.Register then
+    UlSource.Register({
+        id = "UlRemedyForever",
+        title = "UlRemedy Forever",
+        icon = "Interface\\AddOns\\UlRemedyForever\\media\\icon",
+        open = UlRemedy.ToggleOptions,
+    })
+end
+```
+
+and nothing more. The guard means a sibling works exactly as today when UlSource is not installed: slash commands only, no button. UlSource never needs a new release when a new Ul addon appears, because it knows nothing about them; they announce themselves.
+
+**Dependency direction:** siblings depend on UlSource, optionally. UlSource depends on nobody. The sibling's TOC gets `## OptionalDeps: UlSource` so the client loads UlSource first when both are present (without it the load order is alphabetical, and `UlRemedyForever` sorts before `UlSource`). Registering at `PLAYER_LOGIN` rather than at file load is the second safety net: by then every addon is loaded regardless of order. This is a new line in UlRemedyForever's TOC and a new global, `UlSource`, read by UlRemedyForever. Nothing else crosses between them: no shared code, no shared saved variables.
+
+**The button itself:** own code, no LibDBIcon or LibDataBroker, same rule as everything else here. A round button with the addon icon and Blizzard's tracking border texture, placed on the minimap's edge at an angle saved in `UlSourceDB.settings.minimap`. Drag moves it around the ring, a setting hides it. Forever's minimap is the retail `MinimapCluster`, so the radius comes from `Minimap:GetWidth()`, and the shape (round or square) from `GetMinimapShape` when another addon defines it. Hovering shows a tooltip listing the registered addons.
+
+**To probe before building:** `MenuUtil.CreateContextMenu` (the retail 12.x menu API) for the right-click menu, and whether the minimap button can be anchored and dragged in combat (it is our own unprotected frame, so it should be fine, but Forever has surprised before).
 
 ## Development
 
