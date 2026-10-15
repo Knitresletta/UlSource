@@ -59,7 +59,13 @@ Build 1.60.1.70374, 15.10.2026:
 - **Auto loot empties the window before `LOOT_OPENED`.** With auto loot on, Blizzard's loot frame takes everything on `LOOT_READY`, which fires first; `LOOT_OPENED` then reports zero slots. The probe records on `LOOT_READY` since 0.1.1.
 - **`LOOT_READY` fires twice per window**, once before `LOOT_OPENED` and once about a quarter second after it. Since 0.1.2 the second one is noted on the open record instead of starting a new one.
 - **`GetLootSourceInfo` works** and gives one GUID and quantity per slot. A corpse gives `Creature-0-4615-1-3278-3456-...` (NPC ID 3456, Razormane Pathfinder), an herb node gives `GameObject-0-4615-1-3278-3730-...` (object ID 3730, a Bruiseweed node), with the Herbalism cast (spell 3570) recorded 0 s before. Money slots have `GetLootSlotType` 2 and no link.
-- **No secret values seen yet**, in or out of combat.
+- **Loot is readable in combat.** Corpses looted while still in combat (Razorfen Kraul, 0.1.3) gave their slots and source GUIDs like any other. Two empty hyena corpses in the Barrens had zero slots, which is just empty corpses.
+- **Inside an instance the target is secret, the loot source is not.** In Razorfen Kraul (party of 5) `UnitName`, `UnitGUID` and `UnitCreatureType` for the target all came back as secret values, but `GetLootSourceInfo` still gave plain `Creature-...-<npcID>-...` GUIDs for every slot (16 windows). So the NPC ID is always available; the NPC's *name* is only readable outside instances. The addon will have to learn names where it can and show the ID until then.
+- **No map position inside an instance.** `C_Map.GetBestMapForUnit("player")` returns nil in Razorfen Kraul, so no coordinates; the zone text (`GetRealZoneText`) is still there.
+- **Chests and other objects** come through like herb nodes: a GameObject GUID (19861 for Henrig Lonebrow's Journal) with the cast "Opening - No Text" just before.
+- **Group loot:** items at or above the loot threshold (a green belt, a blue Death Prophet Spine) stay in the window unclaimed while the roll runs, still with their source GUID. Items won on rolls by others never open a window on this client, so they are not seen.
+- **Money slots** have `GetLootSlotType` 2, no link, quantity 0, and the amount in copper as the source quantity.
+- **Not seen yet:** mining, skinning, fishing.
 - **These exist:** `GetLootSourceInfo`, `GetLootSlotInfo`, `GetLootSlotLink`, `GetLootSlotType`, `GetLootInfo`, `IsFishingLoot`, `C_Map.GetPlayerMapPosition` (works, map 1413 The Barrens), `TooltipDataProcessor.AddTooltipPostCall`, `issecretvalue`, `canaccessvalue`. **These do not:** the global `GetItemInfo` and `GetSpellInfo` (use `C_Item` and `C_Spell`), `C_LootHistory.GetNumItems`.
 - A creature GUID looks like `Creature-0-4615-1-3278-4128-00004FF037`: the sixth field is the NPC ID (4128, Hecklefang Stalker).
 
