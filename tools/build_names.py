@@ -19,8 +19,9 @@ Usage:
     python3 -I tools/build_names.py --vmangos /path/mangos.sqlite -o NameData.lua
 
 Creatures: every entry, newest patch row wins. Objects: only types that can
-be looted, chests and nodes (type 3, which includes herbs and veins) and
-fishing pools (type 25); doors, signs and traps are left out.
+be looted, chests and nodes (type 3, which includes herbs and veins), the
+fishing bobber (type 17, entry 35591, the source of open-water fishing loot)
+and fishing pools (type 25); doors, signs and traps are left out.
 """
 
 import argparse
@@ -28,7 +29,7 @@ import datetime
 import sqlite3
 import sys
 
-LOOTABLE_OBJECT_TYPES = (3, 25)
+LOOTABLE_OBJECT_TYPES = (3, 17, 25)
 
 
 def lua_string(s):

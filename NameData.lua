@@ -10388,7 +10388,7 @@ UlSource.NPCNames = {
 [18199]="Silithus Dust Turnin Quest Doodad Horde",
 }
 
--- game object ID -> name, 743 chests, nodes and fishing pools
+-- game object ID -> name, 744 chests, nodes and fishing pools
 UlSource.ObjectNames = {
 [32]="Sunken Chest",
 [41]="Ambassador's Locker",
@@ -10651,6 +10651,7 @@ UlSource.ObjectNames = {
 [35252]="Ancient Relic",
 [35253]="Mining Node Point Check",
 [35254]="Herb Node Point Check",
+[35591]="Fishing Bobber",
 [35592]="Chest Spawn Point Check",
 [36738]="The Book of Ur",
 [37098]="Perrine's Chest",
