@@ -1,6 +1,6 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
 	<Frame name="UlSourceNodePinTemplate" enableMouseMotion="false" enableMouseClicks="false" mixin="UlSourceNodePinMixin" virtual="true">
-		<Size x="11" y="11"/>
+		<Size x="8" y="8"/>
 		<Layers>
 			<Layer level="ARTWORK">
 				<Texture parentKey="Icon">
