@@ -76,6 +76,12 @@ def main():
                     "NPC ID -> name, %d creatures" % len(creatures))
         write_table(out, "UlSource.ObjectNames", objects,
                     "game object ID -> name, %d chests, nodes and fishing pools" % len(objects))
+        fishing = read_names(conn, "gameobject_template", "where type in (17, 25)")
+        out.write("-- game object IDs whose loot is fishing: the bobber and every pool, %d objects\n" % len(fishing))
+        out.write("UlSource.FishingObjects = {\n")
+        for entry in sorted(fishing):
+            out.write("[%d]=true,\n" % entry)
+        out.write("}\n")
     print(f"{args.output}: {len(creatures)} creatures, {len(objects)} objects", file=sys.stderr)
 
 

@@ -11136,3 +11136,31 @@ UlSource.ObjectNames = {
 [181366]="Four Horsemen Chest",
 }
 
+-- game object IDs whose loot is fishing: the bobber and every pool, 25 objects
+UlSource.FishingObjects = {
+[35591]=true,
+[180184]=true,
+[180248]=true,
+[180369]=true,
+[180582]=true,
+[180655]=true,
+[180656]=true,
+[180657]=true,
+[180658]=true,
+[180661]=true,
+[180662]=true,
+[180663]=true,
+[180664]=true,
+[180682]=true,
+[180683]=true,
+[180684]=true,
+[180685]=true,
+[180712]=true,
+[180750]=true,
+[180751]=true,
+[180752]=true,
+[180753]=true,
+[180900]=true,
+[180901]=true,
+[180902]=true,
+}

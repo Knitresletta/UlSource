@@ -4,7 +4,7 @@ Where did this come from? An addon for **World of Warcraft: Forever** that recor
 
 A separate addon from [UlRemedyForever](https://github.com/Knitresletta/UlRemedyForever). Same author, same style, no shared code. UlRemedyForever is a set of small fixes that remember nothing; UlSource is a database that grows every time you loot.
 
-> **Status:** 0.4.0: records loot, shows sources in tooltips, browser window with a seat in the Ul minimap menu, icons on the zone map where objects were looted. Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever beta (build 1.60.1, interface `16001`).
+> **Status:** 0.5.0: records loot, shows sources in tooltips, browser window with a seat in the Ul minimap menu, icons on the zone map where objects were looted. Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever beta (build 1.60.1, interface `16001`).
 
 ## Why
 
@@ -189,6 +189,7 @@ UlSourceDB.probe = ...     -- raw probe records, only while /us probe is on; the
 | `/us lines <1-10>` | Sources per tooltip (default 3) |
 | `/us ids` | Show NPC and object IDs next to known names |
 | `/us pins` | Icons on the zone map where objects were looted |
+| `/us pinsall` | Also show nodes for professions this character does not have |
 | `/us clear <item link or ID>` | Forget everything about one item |
 | `/us clearall yes` | Forget everything |
 | `/us probe` | Keep raw per-window records in `UlSourceDB.probe` for API probing (off by default) |
@@ -205,7 +206,7 @@ UlSourceDB.probe = ...     -- raw probe records, only while /us probe is on; the
 
 ### Map pins
 
-With Map pins on (default), every zone map shows a round 8 px icon at each point an object was looted: herbs, ore veins, chests and fishing spots, with the icon of the item that object last gave. The pins take no mouse input, so there is no tooltip and the map underneath is unchanged; the window and the item tooltips are where the numbers live. Points taken before 0.4.0 have no map ID stored; they are matched to a map by zone name the first time the map asks, so they show too. `/us pins` or the checkbox turns them off.
+With Map pins on (default), every zone map shows a round 8 px icon at each point an object was looted: herbs, ore veins, chests and fishing spots, with the icon of the item that object last gave. Nodes are shown only for the professions this character has: herbs need Herbalism, ore needs Mining, fishing spots need Fishing (the item's class from `C_Item.GetItemInfoInstant` says which, the object ID says what is a fishing spot). Chests are always shown. `/us pinsall` shows every node regardless. The pins take no mouse input, so there is no tooltip and the map underneath is unchanged; the window and the item tooltips are where the numbers live. Points taken before 0.4.0 have no map ID stored; they are matched to a map by zone name the first time the map asks, so they show too. `/us pins` or the checkbox turns them off.
 
 ### Minimap
 

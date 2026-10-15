@@ -39,6 +39,11 @@ function Store.ParseKey(key)
     return kind, tonumber(id)
 end
 
+function Store.ParseKeyID(key)
+    local _, id = Store.ParseKey(key)
+    return id
+end
+
 ------------------------------------------------------------------------
 -- Init and migration
 ------------------------------------------------------------------------
