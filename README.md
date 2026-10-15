@@ -4,7 +4,7 @@ Where did this come from? An addon for **World of Warcraft: Forever** that recor
 
 A separate addon from [UlRemedyForever](https://github.com/Knitresletta/UlRemedyForever). Same author, same style, no shared code. UlRemedyForever is a set of small fixes that remember nothing; UlSource is a database that grows every time you loot.
 
-> **Status:** 0.2.0, the first real version: records loot, shows sources in tooltips. Not yet seen in play: skinning. Target client: Forever beta (build 1.60.1, interface `16001`).
+> **Status:** 0.2.0, the first real version: records loot, shows sources in tooltips. Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever beta (build 1.60.1, interface `16001`).
 
 ## Why
 
@@ -66,7 +66,7 @@ Build 1.60.1.70374, 15.10.2026:
 - **Chests and other objects** come through like herb nodes: a GameObject GUID (19861 for Henrig Lonebrow's Journal) with the cast "Opening - No Text" just before.
 - **Group loot:** items at or above the loot threshold (a green belt, a blue Death Prophet Spine) stay in the window unclaimed while the roll runs, still with their source GUID. Items won on rolls by others never open a window on this client, so they are not seen.
 - **Money slots** have `GetLootSlotType` 2, no link, quantity 0, and the amount in copper as the source quantity.
-- **Mining works like herbalism:** an ore vein is a GameObject source and shows up in the tooltip the same way (seen in play 15.10.2026, 0.2.0). **Fishing** goes through the loot window too, so it is recorded like everything else; the source is expected to be the fishing bobber object (35591) in open water and the pool object in a pool. Not confirmed from the file yet. **Not seen yet:** skinning.
+- **Mining, fishing and skinning are not verified.** No character on this account has those professions yet. All three go through the loot window, so they are expected to record like herbs and corpses: an ore vein as a GameObject source, open-water fishing as the fishing bobber object (35591) and pool fishing as the pool object, a skinned corpse as its creature GUID right after a Skinning cast. Expected, not seen.
 - **These exist:** `GetLootSourceInfo`, `GetLootSlotInfo`, `GetLootSlotLink`, `GetLootSlotType`, `GetLootInfo`, `IsFishingLoot`, `C_Map.GetPlayerMapPosition` (works, map 1413 The Barrens), `TooltipDataProcessor.AddTooltipPostCall`, `issecretvalue`, `canaccessvalue`. **These do not:** the global `GetItemInfo` and `GetSpellInfo` (use `C_Item` and `C_Spell`), `C_LootHistory.GetNumItems`.
 - A creature GUID looks like `Creature-0-4615-1-3278-4128-00004FF037`: the sixth field is the NPC ID (4128, Hecklefang Stalker).
 
@@ -167,7 +167,7 @@ UlSourceDB.probe = ...     -- raw probe records, only while /us probe is on; the
 
 ### Still open
 
-- **Skinning** has not been seen. The `s:` rule is a plan, not a fact. Mining is confirmed to behave like herbalism.
+- **Mining, skinning and fishing** have not been seen. The `s:` rule is a plan, not a fact.
 - **Fishing:** every open-water catch has the same source, the fishing bobber, so one source holds every zone and the tooltip shows only the zone fished most. A per-zone view for that one source is the fix if it bothers anyone.
 - **Per-character or account-wide:** account-wide is the draft, because a node is in the same place for every character. Nothing in the model depends on it.
 
@@ -190,7 +190,7 @@ UlSourceDB.probe = ...     -- raw probe records, only while /us probe is on; the
 
 ## Probe
 
-`/us probe` turns on the raw recorder from the 0.1.x builds: every loot window is stored in full (event arguments, every slot with its source GUIDs, position, zone, target, the last spell cast, group and instance) in `UlSourceDB.probe`, last 400 windows, with secret values written as `<secret>` and missing functions as `no <name>`. It exists so that the next unknown (skinning) can be looked at in the saved variables file after a session, and costs nothing while off.
+`/us probe` turns on the raw recorder from the 0.1.x builds: every loot window is stored in full (event arguments, every slot with its source GUIDs, position, zone, target, the last spell cast, group and instance) in `UlSourceDB.probe`, last 400 windows, with secret values written as `<secret>` and missing functions as `no <name>`. It exists so that the next unknown (mining, skinning, fishing) can be looked at in the saved variables file after a session, and costs nothing while off.
 
 ## Minimap button (planned)
 
