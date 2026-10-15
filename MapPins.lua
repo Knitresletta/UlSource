@@ -106,6 +106,14 @@ function UlSourceNodePinMixin:OnLoad()
     self:EnableMouse(false)
 end
 
+-- AcquirePin calls this on every pin after OnAcquired, and it calls
+-- SetPassThroughButtons, which the client blocks (ADDON_ACTION_BLOCKED) on a
+-- pin with mouse input disabled: 24 blocked actions per map open on
+-- 0.5.0. The pin takes no mouse at all, so pass-through has nothing to
+-- decide; overriding it to do nothing is the whole fix.
+function UlSourceNodePinMixin:CheckMouseButtonPassthrough()
+end
+
 function UlSourceNodePinMixin:OnAcquired(point)
     self.Icon:SetTexture(IconFor(point.itemID))
     self.Icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
