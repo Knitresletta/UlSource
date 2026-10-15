@@ -12,6 +12,7 @@ local DEFAULTS = {
     enabled = true,   -- record loot and show tooltip lines
     lines   = 3,      -- sources per tooltip
     showIDs = false,  -- append the NPC or object ID to known names
+    mapPins = true,   -- icons on the zone map where objects were looted
     probe   = false,  -- keep the raw per-window probe records (Probe.lua)
     quiet   = false,  -- no chat line per probe record
 }
@@ -162,6 +163,7 @@ local function PrintHelp()
     print("  /us toggle: recording and tooltip lines on or off")
     print("  /us lines <1-10>: sources per tooltip (now " .. tostring(st.lines) .. ")")
     print("  /us ids: show NPC and object IDs next to known names (now " .. OnOff(st.showIDs) .. ")")
+    print("  /us pins: icons on the zone map where herbs, ore, chests and fish were looted (now " .. OnOff(st.mapPins) .. ")")
     print("  /us clear <item link or ID>: forget everything about one item")
     print("  /us clearall yes: forget everything")
     print("  /us probe: keep raw per-window records for API probing (now " .. OnOff(st.probe) .. ")")
@@ -213,7 +215,8 @@ SlashCmdList["ULSOURCE"] = function(msg)
         PrintStats()
     elseif cmd == "toggle" then
         st.enabled = not st.enabled
-        UlSource.Say("recording and tooltip lines " .. OnOff(st.enabled) .. ".")
+        if UlSource.RefreshMapPins then UlSource.RefreshMapPins() end
+        UlSource.Say("recording, tooltip lines and map pins " .. OnOff(st.enabled) .. ".")
     elseif cmd == "lines" then
         local n = tonumber(rest)
         if n and n >= 1 and n <= 10 then
@@ -225,6 +228,10 @@ SlashCmdList["ULSOURCE"] = function(msg)
     elseif cmd == "ids" then
         st.showIDs = not st.showIDs
         UlSource.Say("IDs next to names " .. OnOff(st.showIDs) .. ".")
+    elseif cmd == "pins" then
+        st.mapPins = not st.mapPins
+        if UlSource.RefreshMapPins then UlSource.RefreshMapPins() end
+        UlSource.Say("map pins " .. OnOff(st.mapPins) .. ".")
     elseif cmd == "clear" then
         local id = ItemIDFrom(rest)
         if not id then

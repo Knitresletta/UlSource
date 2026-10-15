@@ -20,7 +20,7 @@
 -- UlRemedyForever is not installed. One global is read, UlRemedy, and only
 -- if it exists. No shared code, no shared saved variables.
 
-local WIDTH, HEIGHT = 680, 480
+local WIDTH, HEIGHT = 720, 480
 local LEFT_W = 250
 local ITEM_ROW_H = 20
 local SOURCE_ROW_H = 34
@@ -200,6 +200,7 @@ RefreshWindow = function()
     window.enabledBox:SetChecked(st.enabled)
     window.idsBox:SetChecked(st.showIDs)
     window.probeBox:SetChecked(st.probe)
+    window.pinsBox:SetChecked(st.mapPins)
     window.linesText:SetText("Tooltip lines: " .. tostring(st.lines))
     local stats = Store.Stats()
     if stats then
@@ -296,16 +297,23 @@ local function CreateWindow()
         box:SetScript("OnClick", function(self) onClick(self:GetChecked() and true or false) RefreshWindow() end)
         return box
     end
-    f.enabledBox = CheckBox("Recording", 12, function(v) UlSource.db.settings.enabled = v end)
-    f.idsBox = CheckBox("Show IDs", 112, function(v) UlSource.db.settings.showIDs = v end)
-    f.probeBox = CheckBox("Probe", 202, function(v)
+    f.enabledBox = CheckBox("Recording", 12, function(v)
+        UlSource.db.settings.enabled = v
+        if UlSource.RefreshMapPins then UlSource.RefreshMapPins() end
+    end)
+    f.idsBox = CheckBox("Show IDs", 100, function(v) UlSource.db.settings.showIDs = v end)
+    f.pinsBox = CheckBox("Map pins", 184, function(v)
+        UlSource.db.settings.mapPins = v
+        if UlSource.RefreshMapPins then UlSource.RefreshMapPins() end
+    end)
+    f.probeBox = CheckBox("Probe", 268, function(v)
         UlSource.db.settings.probe = v
         if v and UlSource.ProbeInit then UlSource.ProbeInit() end
         if not v then UlSource.db.probe = nil end
     end)
 
     f.linesText = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    f.linesText:SetPoint("BOTTOMLEFT", 300, 37)
+    f.linesText:SetPoint("BOTTOMLEFT", 342, 37)
     local function Step(d)
         local st = UlSource.db.settings
         st.lines = math.max(1, math.min(10, (st.lines or 3) + d))
@@ -314,7 +322,7 @@ local function CreateWindow()
     local minus = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     minus:SetSize(22, 22)
     minus:SetText("-")
-    minus:SetPoint("BOTTOMLEFT", 392, 31)
+    minus:SetPoint("BOTTOMLEFT", 430, 31)
     minus:SetScript("OnClick", function() Step(-1) end)
     local plus = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     plus:SetSize(22, 22)

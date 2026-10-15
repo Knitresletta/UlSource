@@ -53,7 +53,7 @@ local function Position()
     local x, y = pos:GetXY()
     x, y = Plain(x), Plain(y)
     if type(x) ~= "number" or type(y) ~= "number" then return nil end
-    return x, y
+    return x, y, mapID
 end
 
 local function Zone()
@@ -158,8 +158,8 @@ local function OnLootReady()
             if src.guid == targetGUID then src.name = targetName end
         end
     end
-    local x, y = Position()
-    Store.RecordWindow(sources, { zone = Zone(), x = x, y = y })
+    local x, y, mapID = Position()
+    Store.RecordWindow(sources, { zone = Zone(), mapID = mapID, x = x, y = y })
 end
 
 local function OnSpellcast(unit, _, spellID)

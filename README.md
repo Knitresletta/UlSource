@@ -4,7 +4,7 @@ Where did this come from? An addon for **World of Warcraft: Forever** that recor
 
 A separate addon from [UlRemedyForever](https://github.com/Knitresletta/UlRemedyForever). Same author, same style, no shared code. UlRemedyForever is a set of small fixes that remember nothing; UlSource is a database that grows every time you loot.
 
-> **Status:** 0.3.0: records loot, shows sources in tooltips, browser window with a seat in the Ul minimap menu. Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever beta (build 1.60.1, interface `16001`).
+> **Status:** 0.4.0: records loot, shows sources in tooltips, browser window with a seat in the Ul minimap menu, icons on the zone map where objects were looted. Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever beta (build 1.60.1, interface `16001`).
 
 ## Why
 
@@ -16,6 +16,7 @@ Forever has no trustworthy drop database. Wowhead and the old Classic databases 
 - Record every item you loot with its source: the mob (name and NPC ID) or the gathering node (name and object ID), the zone, the coordinates and the time.
 - Count kills and node openings per source, so drop rates are real fractions ("12 of 40 Murloc Scouts dropped it"), not just "seen once".
 - Show the collected data in the item tooltip: top sources, zone, drop rate, last seen.
+- Mark the zone map with a small icon at every spot an herb, ore vein, chest or fishing spot was looted.
 - Let you clear the data, per item or everything.
 
 **It deliberately does not:**
@@ -33,6 +34,7 @@ Forever has no trustworthy drop database. Wowhead and the old Classic databases 
 | Name table (`NameData.lua`) | NPC and object names shipped with the addon, built by `tools/build_names.py` | The vmangos 1.12 world database at build time | Nothing |
 | Name learner (`Names.lua`) | Fills in creature names the table does not have | `PLAYER_TARGET_CHANGED`, `UPDATE_MOUSEOVER_UNIT`, `UnitGUID`, `UnitName` outside instances | Names in Store |
 | Tooltip (`Tooltip.lua`) | Adds the Source lines to the item tooltip | `TooltipDataProcessor` (Forever runs the retail 12.x tooltip code), `AddLine` only | Nothing |
+| Map pins (`MapPins.lua`, `MapPins.xml`) | A 12 px item icon on the zone map at every point an object was looted. No mouse input | Store, `WorldMapFrame:AddDataProvider` | Nothing |
 | Window (`Window.lua`) | The browser: searchable item list, the selected item's sources, settings, forget buttons. Registers in UlRemedyForever's minimap menu when that addon is there | Store, `UlRemedy.Register` if it exists | Settings |
 | Core (`Core.lua`) | Settings, `/us` commands, Lua error log | `UlSourceDB.settings`, `ScriptErrorsFrame.errorData` | Settings, `UlSourceDB.errors` |
 | Probe (`Probe.lua`) | Raw per-window records for API probing, off by default | The same loot events | `UlSourceDB.probe` when on |
@@ -99,16 +101,18 @@ UlSourceDB.sources["c:4436"] = {
     name = "Razorfen Quilguard",      -- nil until learned, see below
     windows = 12,                     -- loot windows opened on this source
     last = 1760500000,                -- time() of the last window
+    lastItem = 1803,                  -- the item it gave most of last time, for the map icon
     zones = {
         ["Razorfen Kraul"] = {
             n = 12,
-            points = { { 0.46, 0.85, 1760500000 }, ... },   -- newest first, at most 5; empty inside instances
+            mapID = 1413,             -- the map the points are fractions of; nil inside instances
+            points = { { 0.46, 0.85, 1760500000 }, ... },   -- newest first; empty inside instances
         },
     },
 }
 ```
 
-Points are kept as a short list per zone, not averaged. A creature roams and a node has several spawn points, and the average of five spawn points is a place where nothing grows. Five recent points per zone is enough for "around 46,85 in the Barrens" and costs nothing.
+Points are kept as a list per zone, not averaged. A creature roams and a node has several spawn points, and the average of five spawn points is a place where nothing grows. Creatures keep the five newest points, enough for "around 46,85 in the Barrens". Objects stand still, so they keep up to 40 distinct points per zone, and looting the same spawn again (within half a percent of the map) refreshes that point instead of adding one. Those points are what the map pins draw.
 
 ### Items
 
@@ -184,6 +188,7 @@ UlSourceDB.probe = ...     -- raw probe records, only while /us probe is on; the
 | `/us toggle` | Recording and tooltip lines on or off |
 | `/us lines <1-10>` | Sources per tooltip (default 3) |
 | `/us ids` | Show NPC and object IDs next to known names |
+| `/us pins` | Icons on the zone map where objects were looted |
 | `/us clear <item link or ID>` | Forget everything about one item |
 | `/us clearall yes` | Forget everything |
 | `/us probe` | Keep raw per-window records in `UlSourceDB.probe` for API probing (off by default) |
@@ -197,6 +202,10 @@ UlSourceDB.probe = ...     -- raw probe records, only while /us probe is on; the
 ## Window
 
 `/us` (or the UlSource row in the Ul minimap button's menu) opens the browser. Left: a search box and every item that has been looted, with how many sources it has; hovering shows the item's tooltip, with the Source lines. Right: the selected item's sources, all of them, each with its count, rate, zone, newest point and last seen; hovering a source lists every zone it was seen in with the recent points. Bottom: Recording, Show IDs and Probe as checkboxes, the tooltip line count with - and +, the stats line, and **Forget item** and **Forget all**, both behind a confirmation. Escape closes it, it can be dragged, and it refreshes itself when loot comes in while it is open.
+
+### Map pins
+
+With Map pins on (default), every zone map shows a 12 px icon at each point an object was looted: herbs, ore veins, chests and fishing spots, with the icon of the item that object last gave. The pins take no mouse input, so there is no tooltip and the map underneath is unchanged; the window and the item tooltips are where the numbers live. Points taken before 0.4.0 have no map ID stored; they are matched to a map by zone name the first time the map asks, so they show too. `/us pins` or the checkbox turns them off.
 
 ### Minimap
 

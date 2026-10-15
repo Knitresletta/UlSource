@@ -16,7 +16,9 @@
 -- the name learner hand it records, the tooltip reads from it.
 
 local DB_VERSION = 1
-local POINTS_PER_ZONE = 5
+local POINTS_PER_ZONE = 5          -- creatures roam; a few recent points are enough
+local NODE_POINTS_PER_ZONE = 40    -- objects stand still; every distinct spawn is worth keeping
+local SAME_SPOT = 0.005            -- map fraction; closer than this is the same spawn
 
 local db
 
@@ -71,7 +73,7 @@ local function Round4(v)
 end
 
 -- sources: { [key] = { kind, id, name?, items = { [itemID] = { name, qty } } } }
--- ctx:     { zone, x?, y? }
+-- ctx:     { zone, mapID?, x?, y? }  (x, y are fractions of the map mapID)
 -- One call per loot window. Every source in the table gets one window.
 function Store.RecordWindow(sources, ctx)
     if not db then return end
@@ -94,12 +96,35 @@ function Store.RecordWindow(sources, ctx)
             end
             z.n = z.n + 1
             if ctx.x and ctx.y then
-                table.insert(z.points, 1, { Round4(ctx.x), Round4(ctx.y), now })
-                while #z.points > POINTS_PER_ZONE do table.remove(z.points) end
+                z.mapID = ctx.mapID or z.mapID
+                local x, y = Round4(ctx.x), Round4(ctx.y)
+                local found
+                if s.kind == "o" then
+                    for i, pt in ipairs(z.points) do
+                        if math.abs(pt[1] - x) <= SAME_SPOT and math.abs(pt[2] - y) <= SAME_SPOT then
+                            found = i
+                            break
+                        end
+                    end
+                end
+                if found then
+                    local pt = table.remove(z.points, found)
+                    pt[3] = now
+                    table.insert(z.points, 1, pt)
+                else
+                    table.insert(z.points, 1, { x, y, now })
+                    local cap = (s.kind == "o") and NODE_POINTS_PER_ZONE or POINTS_PER_ZONE
+                    while #z.points > cap do table.remove(z.points) end
+                end
             end
         end
 
+        local bestQty = -1
         for itemID, it in pairs(src.items) do
+            if (it.qty or 0) > bestQty then
+                bestQty = it.qty or 0
+                s.lastItem = itemID
+            end
             local item = db.items[itemID]
             if not item then
                 item = { sources = {} }
@@ -219,6 +244,49 @@ function Store.ItemSources(itemID)
         return (a.last or 0) > (b.last or 0)
     end)
     return list, item.name
+end
+
+-- Zone entries written before 0.4.0 have no map ID. Build name -> map ID
+-- once from the map tree and fill them in. Idempotent and cheap.
+local mapIDsResolved = false
+function Store.ResolveMapIDs()
+    if mapIDsResolved or not db or not C_Map or not C_Map.GetMapChildrenInfo then return end
+    mapIDsResolved = true
+    local byName = {}
+    for _, root in ipairs({ 946, 947 }) do
+        local ok, children = pcall(C_Map.GetMapChildrenInfo, root, nil, true)
+        if ok and type(children) == "table" then
+            for _, info in ipairs(children) do
+                local name = UlSource.Plain(info.name)
+                if type(name) == "string" and byName[name] == nil then byName[name] = info.mapID end
+            end
+        end
+    end
+    for _, s in pairs(db.sources) do
+        for zoneName, z in pairs(s.zones or {}) do
+            if z.mapID == nil and byName[zoneName] then z.mapID = byName[zoneName] end
+        end
+    end
+end
+
+-- Every point of every object source taken on this map:
+-- { x, y, key, itemID }, newest first within a source.
+function Store.PinsForMap(mapID)
+    local list = {}
+    if not db or not mapID then return list end
+    Store.ResolveMapIDs()
+    for key, s in pairs(db.sources) do
+        if s.kind == "o" then
+            for _, z in pairs(s.zones or {}) do
+                if z.mapID == mapID then
+                    for _, pt in ipairs(z.points or {}) do
+                        list[#list + 1] = { x = pt[1], y = pt[2], key = key, itemID = s.lastItem }
+                    end
+                end
+            end
+        end
+    end
+    return list
 end
 
 function Store.Stats()

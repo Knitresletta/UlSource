@@ -1,8 +1,8 @@
 ## Interface: 16001
 ## Title: UlSource
-## Notes: Records where your materials come from (mob drops, gathering nodes, chests, skinning) and shows it in the item tooltip: top sources, drop rate, zone and coordinates, last seen. Everything comes from your own looting.
+## Notes: Records where your materials come from (mob drops, gathering nodes, chests, skinning) and shows it in the item tooltip: top sources, drop rate, zone and coordinates, last seen. Icons on the zone map where herbs, ore, chests and fish were found. Everything comes from your own looting.
 ## Author: knitresletta
-## Version: 0.3.0
+## Version: 0.4.0
 ## Category: Knitresletta
 ## IconTexture: Interface\AddOns\UlSource\media\icon
 ## SavedVariables: UlSourceDB
@@ -15,4 +15,6 @@ Collector.lua
 Names.lua
 Tooltip.lua
 Window.lua
+MapPins.lua
+MapPins.xml
 Probe.lua
