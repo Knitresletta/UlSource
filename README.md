@@ -34,7 +34,7 @@ Forever has no trustworthy drop database. Wowhead and the old Classic databases 
 | Name table (`NameData.lua`) | NPC and object names shipped with the addon, built by `tools/build_names.py` | The vmangos 1.12 world database at build time | Nothing |
 | Name learner (`Names.lua`) | Fills in creature names the table does not have | `PLAYER_TARGET_CHANGED`, `UPDATE_MOUSEOVER_UNIT`, `UnitGUID`, `UnitName` outside instances | Names in Store |
 | Tooltip (`Tooltip.lua`) | Adds the Source lines to the item tooltip | `TooltipDataProcessor` (Forever runs the retail 12.x tooltip code), `AddLine` only | Nothing |
-| Map pins (`MapPins.lua`, `MapPins.xml`) | A 12 px item icon on the zone map at every point an object was looted. No mouse input | Store, `WorldMapFrame:AddDataProvider` | Nothing |
+| Map pins (`MapPins.lua`, `MapPins.xml`) | A round 11 px item icon on the zone map at every point an object was looted. No mouse input | Store, `WorldMapFrame:AddDataProvider` | Nothing |
 | Window (`Window.lua`) | The browser: searchable item list, the selected item's sources, settings, forget buttons. Registers in UlRemedyForever's minimap menu when that addon is there | Store, `UlRemedy.Register` if it exists | Settings |
 | Core (`Core.lua`) | Settings, `/us` commands, Lua error log | `UlSourceDB.settings`, `ScriptErrorsFrame.errorData` | Settings, `UlSourceDB.errors` |
 | Probe (`Probe.lua`) | Raw per-window records for API probing, off by default | The same loot events | `UlSourceDB.probe` when on |
@@ -205,7 +205,7 @@ UlSourceDB.probe = ...     -- raw probe records, only while /us probe is on; the
 
 ### Map pins
 
-With Map pins on (default), every zone map shows a 12 px icon at each point an object was looted: herbs, ore veins, chests and fishing spots, with the icon of the item that object last gave. The pins take no mouse input, so there is no tooltip and the map underneath is unchanged; the window and the item tooltips are where the numbers live. Points taken before 0.4.0 have no map ID stored; they are matched to a map by zone name the first time the map asks, so they show too. `/us pins` or the checkbox turns them off.
+With Map pins on (default), every zone map shows a round 11 px icon at each point an object was looted: herbs, ore veins, chests and fishing spots, with the icon of the item that object last gave. The pins take no mouse input, so there is no tooltip and the map underneath is unchanged; the window and the item tooltips are where the numbers live. Points taken before 0.4.0 have no map ID stored; they are matched to a map by zone name the first time the map asks, so they show too. `/us pins` or the checkbox turns them off.
 
 ### Minimap
 

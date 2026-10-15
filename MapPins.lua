@@ -4,7 +4,7 @@
 -- The points come from the store: every "o:" source keeps, per zone, the
 -- map ID the point was taken on and up to 40 distinct points (same spawn
 -- twice is one point). Each pin shows the icon of the item the object
--- last gave, 12 pixels, and takes no mouse input at all: no tooltip, no
+-- last gave, 11 pixels and rounded to a circle, and takes no mouse input at all: no tooltip, no
 -- click, the map underneath behaves as if the pin were not there.
 --
 -- Same mechanism as UlRemedyForever's flight paths: a data provider of
