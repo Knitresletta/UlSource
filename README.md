@@ -29,23 +29,22 @@ Forever has no trustworthy drop database. Wowhead and the old Classic databases 
 | Element | Does | Needs | Writes |
 |---|---|---|---|
 | Collector | Listens to the loot window opening, reads every slot and its source | `LOOT_OPENED`, `LOOT_SLOT_CLEARED`, `GetLootSourceInfo`, `GetLootSlotInfo`, `C_Map.GetPlayerMapPosition` | Nothing directly, hands records to Store |
-| Source resolver | Turns a loot source GUID into "mob 1234 Murloc Scout" or "node 5678 Peacebloom" | The GUID string (type and ID are in it), `UNIT_SPELLCAST_SUCCEEDED` for the gathering spell that opened a node | Nothing |
-| Kill counter | Counts looted corpses and node openings so the drop rate has a denominator | The loot windows themselves, one per corpse or node (the combat log is closed to addons on Forever, see below) | Counters in Store |
+| Source resolver | Turns a loot source GUID into a source key: `c:1234` (mob), `o:5678` (node or chest), `s:1234` (skinned corpse) | The GUID string (type and ID are in it), `UNIT_SPELLCAST_SUCCEEDED` for the Skinning cast | Nothing |
+| Window counter | Counts loot windows per source so the drop rate has a denominator | The loot windows themselves, one per corpse or node (the combat log is closed to addons on Forever, see below) | Counters in Store |
+| Name learner | Fills in NPC names for sources whose name was secret when looted | `PLAYER_TARGET_CHANGED`, `UPDATE_MOUSEOVER_UNIT`, `UnitGUID`, `UnitName` outside instances | Names in Store |
 | Store | The database, one entry per item with a list of sources and counts | SavedVariables `UlSourceDB` | SavedVariables only |
 | Tooltip | Adds the lines to the item tooltip | `TooltipDataProcessor` (Forever runs the retail 12.x tooltip code, not the Classic `OnTooltipSetItem` hook) | Nothing |
 | Options and slash | `/us` to list, clear and toggle | `UlSourceDB.settings` | Settings |
 
 Nothing calls out of the game. No network, no other addons, no chat messages. The addon reads loot, combat log and map position, and writes one SavedVariables file.
 
-## Open questions to settle first
+## Open questions, and what the probe answered
 
-These must be probed in-game before the data model is drawn, in the same way the trainer API was probed for UlRemedyForever:
-
-1. **Does `GetLootSourceInfo` exist and work on Forever?** It is the retail API that gives a GUID per loot slot. Without it the source has to be guessed from the target or the last cast, which is much weaker.
-2. **What do gathering GUIDs look like?** A node is a GameObject; the GUID should carry its object ID. Check that herbs, ore and fishing all come through the loot window the same way.
-3. **Skinning:** the corpse is the source, but the item came from a profession, not a kill. Decide whether that counts as a mob drop, a node, or its own category.
-4. **Secret values:** Forever's client marks some UI values as secret in combat. Check that loot slot info and source GUIDs are readable when the loot window opens right after a kill.
-5. **Database size:** one entry per (item, source) with counters stays small. Per-loot rows with coordinates do not. Decide early whether coordinates are kept per loot or averaged per source.
+1. **Does `GetLootSourceInfo` exist and work on Forever?** Yes. One GUID and quantity per slot, readable in combat and inside instances. Answered 15.10.2026.
+2. **What do gathering GUIDs look like?** Herb nodes and chests are GameObjects with the object ID in the GUID. Mining and fishing not seen yet, expected to be the same.
+3. **Skinning:** not seen yet. The plan below treats a Creature source with a Skinning cast just before as its own source kind, so skins and drops get separate rates.
+4. **Secret values:** loot slots and source GUIDs are never secret. The target's name and GUID are secret inside instances, so NPC names must be learned outside and the ID shown until then.
+5. **Database size:** decided below. Counters per (item, source), a few recent points per source and zone, no per-loot rows.
 
 ## First step
 
@@ -68,6 +67,99 @@ Build 1.60.1.70374, 15.10.2026:
 - **Not seen yet:** mining, skinning, fishing.
 - **These exist:** `GetLootSourceInfo`, `GetLootSlotInfo`, `GetLootSlotLink`, `GetLootSlotType`, `GetLootInfo`, `IsFishingLoot`, `C_Map.GetPlayerMapPosition` (works, map 1413 The Barrens), `TooltipDataProcessor.AddTooltipPostCall`, `issecretvalue`, `canaccessvalue`. **These do not:** the global `GetItemInfo` and `GetSpellInfo` (use `C_Item` and `C_Spell`), `C_LootHistory.GetNumItems`.
 - A creature GUID looks like `Creature-0-4615-1-3278-4128-00004FF037`: the sixth field is the NPC ID (4128, Hecklefang Stalker).
+
+## Data model (draft, 15.10.2026)
+
+Everything lives in one SavedVariables table, `UlSourceDB`, account-wide: what one character learns, every character sees. The shape is chosen so that the tooltip can be drawn from one lookup per item, and so that the file stays small no matter how much is looted.
+
+### The three questions the tooltip answers
+
+For an item: **where did it come from** (which sources), **how often** (dropped in x of y windows), and **where was that** (zone and a point). Everything stored exists to answer one of those three. Nothing is stored per loot.
+
+### Sources
+
+A source is the thing that was looted, identified by a short key:
+
+| Key | Means | Comes from |
+|---|---|---|
+| `c:4436` | A creature's drop, NPC ID 4436 | `Creature-...` GUID from `GetLootSourceInfo` |
+| `o:1621` | A game object: herb node, ore vein, chest | `GameObject-...` GUID from `GetLootSourceInfo` |
+| `s:4511` | A skinned corpse, NPC ID 4511 | `Creature-...` GUID when the player cast Skinning within 2 seconds before `LOOT_READY` |
+
+The skinning key is separate from the drop key on purpose: a corpse that has been looted and then skinned opens two windows with the same GUID, and "Boar Ribs, 1 of 12 Thunderhawks" would be a lie if the twelve included the skinning windows. The same mechanism would give fishing its own kind (`f:`) if fishing turns out to carry a GUID; it is unknown until seen.
+
+```lua
+UlSourceDB.sources["c:4436"] = {
+    kind = "c", id = 4436,
+    name = "Razorfen Quilguard",      -- nil until learned, see below
+    windows = 12,                     -- loot windows opened on this source
+    last = 1760500000,                -- time() of the last window
+    zones = {
+        ["Razorfen Kraul"] = {
+            n = 12,
+            points = { { 0.46, 0.85, 1760500000 }, ... },   -- newest first, at most 5; empty inside instances
+        },
+    },
+}
+```
+
+Points are kept as a short list per zone, not averaged. A creature roams and a node has several spawn points, and the average of five spawn points is a place where nothing grows. Five recent points per zone is enough for "around 46,85 in the Barrens" and costs nothing.
+
+### Items
+
+```lua
+UlSourceDB.items[2450] = {
+    name = "Briarthorn",             -- from the loot slot, so the tooltip works before the item cache is warm
+    sources = {
+        ["o:1621"] = { n = 5, qty = 11, last = 1760500000 },   -- windows it appeared in, total quantity, last time
+        ["c:4436"] = { n = 1, qty = 1,  last = 1760400000 },
+    },
+}
+```
+
+The drop rate for an item from a source is `items[id].sources[key].n / sources[key].windows`. Both numbers come from the same windows, so the fraction is honest: "5 of 5 Briarthorn nodes" and "1 of 12 Razorfen Quilguards".
+
+### What counts as one window
+
+`LOOT_READY` fires twice per window; the second one within 1.5 seconds of the first is ignored. A window with no slots has no GUID to attribute and is not counted (an empty corpse is not lootable in the first place, so this is rare). Money and currency slots carry a GUID and so count the window for the source, but the money itself is not stored. Every slot is read on `LOOT_READY`, before auto loot empties the window, and an item counts whether or not it is then taken, so items left for a group roll are seen. A window may hold slots from more than one GUID (the client supports looting several corpses at once); then each source gets one window and each slot is attributed to its own GUID.
+
+What the data cannot see, said once: corpses looted by other group members, and items others win on rolls. The denominator is "windows this account opened", not kills.
+
+### Names
+
+The loot source is a GUID; the name of the creature is not in it. Outside instances the target at loot time is usually the corpse, and when the target's GUID is readable and equals the source GUID, the name is taken from there. Inside instances the target's name and GUID are secret values, so the source is stored with its ID only. Two cheap learners fill the gaps afterwards: on `PLAYER_TARGET_CHANGED` and `UPDATE_MOUSEOVER_UNIT`, when `UnitGUID` is readable and points to a creature whose `c:` or `s:` entry has no name yet, the name is written. Game objects have no unit, so a node is named after the first item it gave ("Briarthorn") and a chest after its cast ("Opening"), which is right often enough; a shipped object-ID table can replace that later if it bothers anyone.
+
+The tooltip shows `Razorfen Quilguard` when the name is known and `NPC 4436` until then, never a guess.
+
+### Tooltip
+
+Under the item's own lines, at most three sources, best first (most windows the item appeared in):
+
+```
+Source: Briarthorn node, 5 of 5, The Barrens 46,85 (2 h ago)
+        Razorfen Quilguard, 1 of 12, Razorfen Kraul
+        NPC 4523, 1 of 9, Razorfen Kraul
+```
+
+Same hook as UlRemedyForever: `TooltipDataProcessor.AddTooltipPostCall` for `Enum.TooltipDataType.Item`, `AddLine` only, no money frames or layout calls inside the tooltip.
+
+### Size
+
+A source is about 200 bytes plus 30 per point, an item-source pair about 50. Two thousand sources and five thousand pairs, which is a long time of looting, is under one megabyte. No cap is needed, but `/us clear` per item and `/us clearall` exist.
+
+### Settings and housekeeping
+
+```lua
+UlSourceDB.settings = { enabled = true, lines = 3, showIDs = true }
+UlSourceDB.version = 1     -- bumped when the shape changes; an older file is migrated or, if that is impossible, wiped with a chat line saying so
+UlSourceDB.probe = ...     -- the 0.1.x probe data, removed when 0.2.0 is installed
+```
+
+### Still open
+
+- **Skinning** and **mining** have not been seen. The `s:` rule is a plan, not a fact.
+- **Fishing:** `IsFishingLoot` exists; whether the slots carry a GUID, and of what, is unknown.
+- **Per-character or account-wide:** account-wide is the draft, because a node is in the same place for every character. Nothing in the model depends on it.
 
 ## Probe build (0.1.x)
 
