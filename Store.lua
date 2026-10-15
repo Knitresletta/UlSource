@@ -116,6 +116,19 @@ function Store.RecordWindow(sources, ctx)
             p.last = now
         end
     end
+    if UlSource.OnDataChanged then UlSource.OnDataChanged() end
+end
+
+-- Every zone a source was seen in, most seen first: { name, n, points }.
+function Store.SourceZones(key)
+    local s = db and db.sources[key]
+    if not s then return nil end
+    local list = {}
+    for name, z in pairs(s.zones or {}) do
+        list[#list + 1] = { name = name, n = z.n, points = z.points or {} }
+    end
+    table.sort(list, function(a, b) return a.n > b.n end)
+    return list
 end
 
 function Store.NoteUnattributed()

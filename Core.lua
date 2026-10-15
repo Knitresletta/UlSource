@@ -156,6 +156,7 @@ local function OnOff(v) return v and "|cff00ff00on|r" or "|cffff4444off|r" end
 local function PrintHelp()
     local st = UlSource.db.settings
     UlSource.Say(UlSource.Version() .. ". Recording " .. OnOff(st.enabled) .. ", probe " .. OnOff(st.probe) .. ". Commands:")
+    print("  /us: open or close the browser window (also in the Ul minimap button's menu)")
     print("  /us <item link or ID>: everything known about an item")
     print("  /us stats: how much is known (sources, items, names)")
     print("  /us toggle: recording and tooltip lines on or off")
@@ -204,7 +205,9 @@ SlashCmdList["ULSOURCE"] = function(msg)
         return
     end
     local st = UlSource.db.settings
-    if cmd == "" or cmd == "help" then
+    if cmd == "" or cmd == "show" or cmd == "window" then
+        if UlSource.ToggleWindow then UlSource.ToggleWindow() else PrintHelp() end
+    elseif cmd == "help" then
         PrintHelp()
     elseif cmd == "stats" then
         PrintStats()
