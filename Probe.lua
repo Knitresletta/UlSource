@@ -1,6 +1,8 @@
 -- Probe: records every loot window, raw, so the Forever loot API can be
--- read from the saved variables after a session. No tooltip, no database
--- yet. This file answers the open questions in README.md:
+-- read from the saved variables after a session. Off by default since
+-- 0.2.0 (/us probe turns it on); the collector is the real thing. Kept
+-- because mining, skinning and fishing have not been seen yet. This file
+-- answered the open questions in README.md:
 --
 --   1. Does GetLootSourceInfo exist and return a GUID per slot?
 --   2. What do gathering GUIDs (herbs, ore, fishing) look like?
@@ -432,6 +434,7 @@ end
 ------------------------------------------------------------------------
 
 function UlSource.ProbeInit()
+    if not UlSource.db.settings.probe then return end
     UlSource.db.probe = UlSource.db.probe or {}
     db = UlSource.db.probe
     db.loots = db.loots or {}
@@ -457,7 +460,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
         playerGUID = UnitGUID and UnitGUID("player")
         return
     end
-    if not db then return end   -- ADDON_LOADED has not run yet
+    if not db or not UlSource.db or not UlSource.db.settings.probe then return end
     if event == "LOOT_READY" then
         Try("LOOT_READY", OnLootReady, ...)
     elseif event == "LOOT_OPENED" then

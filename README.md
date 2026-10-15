@@ -4,7 +4,7 @@ Where did this come from? An addon for **World of Warcraft: Forever** that recor
 
 A separate addon from [UlRemedyForever](https://github.com/Knitresletta/UlRemedyForever). Same author, same style, no shared code. UlRemedyForever is a set of small fixes that remember nothing; UlSource is a database that grows every time you loot.
 
-> **Status:** probe build 0.1.4, collects raw loot data and nothing else. Target client: Forever beta (build 1.60.1, interface `16001`).
+> **Status:** 0.2.0, the first real version: records loot, shows sources in tooltips. Not yet seen in play: mining, skinning, fishing. Target client: Forever beta (build 1.60.1, interface `16001`).
 
 ## Why
 
@@ -24,18 +24,19 @@ Forever has no trustworthy drop database. Wowhead and the old Classic databases 
 - Change how looting works. No auto-loot, no filtering, no selling. It watches and writes down.
 - Track quest rewards, vendor purchases, mail or trades. Only loot windows.
 
-## How it would work
+## How it works
 
 | Element | Does | Needs | Writes |
 |---|---|---|---|
-| Collector | Listens to the loot window opening, reads every slot and its source | `LOOT_OPENED`, `LOOT_SLOT_CLEARED`, `GetLootSourceInfo`, `GetLootSlotInfo`, `C_Map.GetPlayerMapPosition` | Nothing directly, hands records to Store |
-| Source resolver | Turns a loot source GUID into a source key: `c:1234` (mob), `o:5678` (node or chest), `s:1234` (skinned corpse) | The GUID string (type and ID are in it), `UNIT_SPELLCAST_SUCCEEDED` for the Skinning cast | Nothing |
-| Window counter | Counts loot windows per source so the drop rate has a denominator | The loot windows themselves, one per corpse or node (the combat log is closed to addons on Forever, see below) | Counters in Store |
-| Name table | NPC and object names shipped with the addon (`NameData.lua`, built by `tools/build_names.py`) | The vmangos 1.12 world database at build time | Nothing |
-| Name learner | Fills in NPC names the table does not have | `PLAYER_TARGET_CHANGED`, `UPDATE_MOUSEOVER_UNIT`, `UnitGUID`, `UnitName` outside instances | Names in Store |
-| Store | The database, one entry per item with a list of sources and counts | SavedVariables `UlSourceDB` | SavedVariables only |
-| Tooltip | Adds the lines to the item tooltip | `TooltipDataProcessor` (Forever runs the retail 12.x tooltip code, not the Classic `OnTooltipSetItem` hook) | Nothing |
-| Options and slash | `/us` to list, clear and toggle | `UlSourceDB.settings` | Settings |
+| Collector (`Collector.lua`) | Reads every slot and its source when a loot window is ready, one record per window | `LOOT_READY`, `GetLootSourceInfo`, `GetLootSlotInfo`, `GetLootSlotLink`, `C_Map.GetPlayerMapPosition`, `UNIT_SPELLCAST_SUCCEEDED` for the Skinning cast | Nothing directly, hands records to Store |
+| Store (`Store.lua`) | The database: sources with window counts and points, items with per-source counts, learned names. The only module that writes to it | SavedVariables `UlSourceDB` | SavedVariables only |
+| Name table (`NameData.lua`) | NPC and object names shipped with the addon, built by `tools/build_names.py` | The vmangos 1.12 world database at build time | Nothing |
+| Name learner (`Names.lua`) | Fills in creature names the table does not have | `PLAYER_TARGET_CHANGED`, `UPDATE_MOUSEOVER_UNIT`, `UnitGUID`, `UnitName` outside instances | Names in Store |
+| Tooltip (`Tooltip.lua`) | Adds the Source lines to the item tooltip | `TooltipDataProcessor` (Forever runs the retail 12.x tooltip code), `AddLine` only | Nothing |
+| Core (`Core.lua`) | Settings, `/us` commands, Lua error log | `UlSourceDB.settings`, `ScriptErrorsFrame.errorData` | Settings, `UlSourceDB.errors` |
+| Probe (`Probe.lua`) | Raw per-window records for API probing, off by default | The same loot events | `UlSourceDB.probe` when on |
+
+The combat log is closed to addons on Forever, so there is no kill counter: the denominator for a drop rate is loot windows opened on that source.
 
 Nothing calls out of the game. No network, no other addons, no chat messages. The addon reads loot, combat log and map position, and writes one SavedVariables file.
 
@@ -69,7 +70,9 @@ Build 1.60.1.70374, 15.10.2026:
 - **These exist:** `GetLootSourceInfo`, `GetLootSlotInfo`, `GetLootSlotLink`, `GetLootSlotType`, `GetLootInfo`, `IsFishingLoot`, `C_Map.GetPlayerMapPosition` (works, map 1413 The Barrens), `TooltipDataProcessor.AddTooltipPostCall`, `issecretvalue`, `canaccessvalue`. **These do not:** the global `GetItemInfo` and `GetSpellInfo` (use `C_Item` and `C_Spell`), `C_LootHistory.GetNumItems`.
 - A creature GUID looks like `Creature-0-4615-1-3278-4128-00004FF037`: the sixth field is the NPC ID (4128, Hecklefang Stalker).
 
-## Data model (draft, 15.10.2026)
+## Data model
+
+Drafted 15.10.2026, implemented in 0.2.0 as written here, with one change: learned names live in `UlSourceDB.names` (by NPC or object ID) rather than on each source entry, so a name learned for `c:4511` also serves `s:4511`.
 
 Everything lives in one SavedVariables table, `UlSourceDB`, account-wide: what one character learns, every character sees. The shape is chosen so that the tooltip can be drawn from one lookup per item, and so that the file stays small no matter how much is looted.
 
@@ -134,7 +137,7 @@ The loot source is a GUID; the name of the creature is not in it, and inside ins
 2. **The target at loot time**, outside instances: when the target's GUID is readable and equals the source GUID, its name is stored on the source.
 3. **Two cheap learners afterwards:** on `PLAYER_TARGET_CHANGED` and `UPDATE_MOUSEOVER_UNIT`, when `UnitGUID` is readable and points to a creature whose `c:` or `s:` entry has no name yet, the name is written. Game objects have no unit, so a Forever-new node is named after the first item it gave ("Briarthorn") until a better source exists.
 
-Learned names are stored on the source entry and win over the shipped table, so a renamed creature shows its Forever name once seen. The tooltip shows `Razorfen Quilguard` when the name is known and `NPC 4436` until then, never a guess.
+Learned names are stored in `UlSourceDB.names` and win over the shipped table, so a renamed creature shows its Forever name once seen; a name the table already has is not stored again. The tooltip shows `Razorfen Quilguard` when the name is known and `NPC 4436` until then, never a guess.
 
 Wowhead's Forever database has the new creatures and rares; pulling those into the table is a later tool, not part of 0.2.0.
 
@@ -157,9 +160,9 @@ A source is about 200 bytes plus 30 per point, an item-source pair about 50. Two
 ### Settings and housekeeping
 
 ```lua
-UlSourceDB.settings = { enabled = true, lines = 3, showIDs = true }
+UlSourceDB.settings = { enabled = true, lines = 3, showIDs = false, probe = false }
 UlSourceDB.version = 1     -- bumped when the shape changes; an older file is migrated or, if that is impossible, wiped with a chat line saying so
-UlSourceDB.probe = ...     -- the 0.1.x probe data, removed when 0.2.0 is installed
+UlSourceDB.probe = ...     -- raw probe records, only while /us probe is on; the 0.1.x data is dropped when 0.2.0 loads
 ```
 
 ### Still open
@@ -168,19 +171,26 @@ UlSourceDB.probe = ...     -- the 0.1.x probe data, removed when 0.2.0 is instal
 - **Fishing:** `IsFishingLoot` exists; whether the slots carry a GUID, and of what, is unknown.
 - **Per-character or account-wide:** account-wide is the draft, because a node is in the same place for every character. Nothing in the model depends on it.
 
-## Probe build (0.1.x)
+## Commands
 
-The current version has no tooltip and no database. It records every loot window, raw, to `UlSourceDB.probe` in the saved variables file (`WTF/Account/<account>/SavedVariables/UlSource.lua`): the event arguments, every slot with its source GUIDs, map position, zone, target, whether the client calls it fishing loot, and the last spell you cast (the gathering spell that opened a node). Values the client hides as secret are stored as `<secret>`, missing functions as `no <name>`, so the file says exactly what Forever gives an addon. The last 400 loot windows are kept.
+`/us` prints the list with the current state.
 
 | Command | Description |
 |---------|-------------|
-| `/us probe` | What has been recorded: loot windows, kill events and how many had secret data, missing API |
-| `/us last` | Print the last loot window in full |
-| `/us quiet` | Toggle the one-line chat note per loot window |
-| `/us probereset` | Forget all probe data |
+| `/us <item link or ID>` | Everything known about an item: every source with count, rate, zone and last seen |
+| `/us stats` | How much is known: sources, items, item-source pairs, names learned |
+| `/us toggle` | Recording and tooltip lines on or off |
+| `/us lines <1-10>` | Sources per tooltip (default 3) |
+| `/us ids` | Show NPC and object IDs next to known names |
+| `/us clear <item link or ID>` | Forget everything about one item |
+| `/us clearall yes` | Forget everything |
+| `/us probe` | Keep raw per-window records in `UlSourceDB.probe` for API probing (off by default) |
+| `/us probestats`, `/us probelast`, `/us probereset` | Look at or forget the probe records |
 | `/us errors` | Save this session's Lua errors and blocked actions to the saved variables (also done on logout and reload) |
 
-To answer the open questions, one session should include: killing and looting a few mobs (some looted while still in combat), herbs, ore, a fishing cast, skinning a corpse, and opening a chest. Then log out or `/reload` so the file is written, and read it.
+## Probe
+
+`/us probe` turns on the raw recorder from the 0.1.x builds: every loot window is stored in full (event arguments, every slot with its source GUIDs, position, zone, target, the last spell cast, group and instance) in `UlSourceDB.probe`, last 400 windows, with secret values written as `<secret>` and missing functions as `no <name>`. It exists so that the next unknown (mining, skinning, fishing) can be looked at in the saved variables file after a session, and costs nothing while off.
 
 ## Minimap button (planned)
 

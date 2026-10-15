@@ -1,15 +1,19 @@
--- UlSource core: saved variables, slash commands and the Lua error log.
+-- UlSource core: saved variables, settings, slash commands and the Lua
+-- error log. The modules (Store, Collector, Names, Tooltip, Probe) hang
+-- off the UlSource table; load order is the TOC's.
 --
--- Probe build (0.1.x): there is no feature yet. Probe.lua writes raw loot
--- data to UlSourceDB.probe so the Forever loot API can be read from the
--- saved variables file after a play session. Everything that could be a
--- secret value on this client (retail 12.x UI with Midnight restrictions)
--- is passed through UlSource.Plain before it is stored or printed.
+-- Everything that could be a secret value on this client (retail 12.x UI
+-- with Midnight restrictions) is passed through UlSource.Plain before it
+-- is stored or printed.
 
 UlSource = { name = "UlSource", db = nil }
 
 local DEFAULTS = {
-    quiet = false,   -- no chat line per loot window
+    enabled = true,   -- record loot and show tooltip lines
+    lines   = 3,      -- sources per tooltip
+    showIDs = false,  -- append the NPC or object ID to known names
+    probe   = false,  -- keep the raw per-window probe records (Probe.lua)
+    quiet   = false,  -- no chat line per probe record
 }
 
 local function InitDB()
@@ -22,6 +26,7 @@ local function InitDB()
         if DEFAULTS[k] == nil then UlSourceDB.settings[k] = nil end
     end
     UlSource.db = UlSourceDB
+    if not UlSourceDB.settings.probe then UlSourceDB.probe = nil end
 end
 
 function UlSource.Version()
@@ -43,6 +48,22 @@ function UlSource.Plain(v)
     local t = type(v)
     if t == "string" or t == "number" or t == "boolean" then return v end
     return tostring(v)
+end
+
+-- "Creature-0-4379-0-123-299-0000A4B6C1" -> { kind = "Creature", id = 299 }.
+-- GameObject, Vehicle and Pet GUIDs carry their ID in the same position.
+-- Other kinds (Player, Item) get only the kind.
+function UlSource.ParseGUID(guid)
+    guid = UlSource.Plain(guid)
+    if type(guid) ~= "string" then return { raw = guid } end
+    local parts = {}
+    for part in guid:gmatch("[^-]+") do parts[#parts + 1] = part end
+    local kind = parts[1]
+    local rec = { raw = guid, kind = kind }
+    if kind == "Creature" or kind == "Vehicle" or kind == "GameObject" or kind == "Pet" then
+        rec.id = tonumber(parts[6])
+    end
+    return rec
 end
 
 ------------------------------------------------------------------------
@@ -130,37 +151,113 @@ end
 -- Slash commands
 ------------------------------------------------------------------------
 
+local function OnOff(v) return v and "|cff00ff00on|r" or "|cffff4444off|r" end
+
 local function PrintHelp()
-    UlSource.Say(UlSource.Version() .. " probe build. Commands:")
-    print("  /us probe: what the probe has recorded so far (loot windows, kills, missing API)")
-    print("  /us last: print the last recorded loot window in detail")
-    print("  /us quiet: toggle the chat line per loot window")
-    print("  /us probereset: forget all probe data")
+    local st = UlSource.db.settings
+    UlSource.Say(UlSource.Version() .. ". Recording " .. OnOff(st.enabled) .. ", probe " .. OnOff(st.probe) .. ". Commands:")
+    print("  /us <item link or ID>: everything known about an item")
+    print("  /us stats: how much is known (sources, items, names)")
+    print("  /us toggle: recording and tooltip lines on or off")
+    print("  /us lines <1-10>: sources per tooltip (now " .. tostring(st.lines) .. ")")
+    print("  /us ids: show NPC and object IDs next to known names (now " .. OnOff(st.showIDs) .. ")")
+    print("  /us clear <item link or ID>: forget everything about one item")
+    print("  /us clearall yes: forget everything")
+    print("  /us probe: keep raw per-window records for API probing (now " .. OnOff(st.probe) .. ")")
+    print("  /us probestats, /us probelast, /us probereset: look at or forget the probe records")
     print("  /us errors: save this session's Lua errors and blocked actions, print the last five")
+end
+
+local function ItemIDFrom(text)
+    local id = text:match("item:(%d+)") or text:match("^(%d+)$")
+    return id and tonumber(id)
+end
+
+local function PrintItem(itemID)
+    local list, name = UlSource.Store.ItemSources(itemID)
+    if not list then
+        UlSource.Say("nothing recorded for item " .. itemID .. ".")
+        return
+    end
+    UlSource.Say((name or ("item " .. itemID)) .. ", " .. #list .. " source(s):")
+    for _, src in ipairs(list) do
+        print("  " .. UlSource.SourceLine(src) .. "  [" .. src.key .. ", " .. src.qty .. " total]")
+    end
+end
+
+local function PrintStats()
+    local st = UlSource.Store.Stats()
+    if not st then return end
+    UlSource.Say(st.sources .. " sources (" .. st.named .. " with a name), " .. st.items .. " items, "
+        .. st.pairs .. " item-source pairs, " .. st.learned .. " names learned in play, "
+        .. st.unattributed .. " slots without a usable source.")
 end
 
 SLASH_ULSOURCE1 = "/us"
 SLASH_ULSOURCE2 = "/ulsource"
 SlashCmdList["ULSOURCE"] = function(msg)
-    local cmd = strtrim(msg or ""):lower()
+    msg = strtrim(msg or "")
+    local cmd, rest = msg:match("^(%S+)%s*(.-)$")
+    cmd = (cmd or ""):lower()
     if not UlSource.db then
         UlSource.Say("not loaded yet.")
         return
     end
-    if cmd == "probe" then
+    local st = UlSource.db.settings
+    if cmd == "" or cmd == "help" then
+        PrintHelp()
+    elseif cmd == "stats" then
+        PrintStats()
+    elseif cmd == "toggle" then
+        st.enabled = not st.enabled
+        UlSource.Say("recording and tooltip lines " .. OnOff(st.enabled) .. ".")
+    elseif cmd == "lines" then
+        local n = tonumber(rest)
+        if n and n >= 1 and n <= 10 then
+            st.lines = math.floor(n)
+            UlSource.Say("showing up to " .. st.lines .. " sources per tooltip.")
+        else
+            UlSource.Say("/us lines <1-10>")
+        end
+    elseif cmd == "ids" then
+        st.showIDs = not st.showIDs
+        UlSource.Say("IDs next to names " .. OnOff(st.showIDs) .. ".")
+    elseif cmd == "clear" then
+        local id = ItemIDFrom(rest)
+        if not id then
+            UlSource.Say("/us clear <item link or ID>")
+        elseif UlSource.Store.ClearItem(id) then
+            UlSource.Say("forgot item " .. id .. ".")
+        else
+            UlSource.Say("nothing recorded for item " .. id .. ".")
+        end
+    elseif cmd == "clearall" then
+        if rest:lower() == "yes" then
+            UlSource.Store.ClearAll()
+            UlSource.Say("forgot everything.")
+        else
+            UlSource.Say("this forgets every source, item and learned name. Type /us clearall yes to do it.")
+        end
+    elseif cmd == "probe" then
+        st.probe = not st.probe
+        if st.probe and UlSource.ProbeInit then UlSource.ProbeInit() end
+        if not st.probe then UlSource.db.probe = nil end
+        UlSource.Say("probe records " .. OnOff(st.probe) .. (st.probe and ". Raw loot windows go to UlSourceDB.probe." or ". Probe data dropped."))
+    elseif cmd == "probestats" then
         if UlSource.ProbeSummary then UlSource.ProbeSummary() end
-    elseif cmd == "last" then
+    elseif cmd == "probelast" then
         if UlSource.ProbePrintLast then UlSource.ProbePrintLast() end
-    elseif cmd == "quiet" then
-        UlSource.db.settings.quiet = not UlSource.db.settings.quiet
-        UlSource.Say("chat line per loot window " .. (UlSource.db.settings.quiet and "off" or "on") .. ".")
     elseif cmd == "probereset" then
         if UlSource.ProbeReset then UlSource.ProbeReset() end
+    elseif cmd == "quiet" then
+        st.quiet = not st.quiet
+        UlSource.Say("probe chat line " .. OnOff(not st.quiet) .. ".")
     elseif cmd == "errors" then
         local ok, err = pcall(UlSource.DumpErrors, true)
         if not ok then UlSource.Say("could not read the error list: " .. tostring(err)) end
     else
-        PrintHelp()
+        local id = ItemIDFrom(msg)
+        if id then PrintItem(id) else PrintHelp() end
     end
 end
 
@@ -175,13 +272,14 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2)
         pcall(NoteBlocked, event == "ADDON_ACTION_BLOCKED" and "blocked" or "forbidden", arg1, arg2)
     elseif event == "ADDON_LOADED" and arg1 == UlSource.name then
         InitDB()
-        if UlSource.ProbeInit then UlSource.ProbeInit() end
+        UlSource.Store.Init()
+        if UlSource.db.settings.probe and UlSource.ProbeInit then UlSource.ProbeInit() end
         self:UnregisterEvent("ADDON_LOADED")
     elseif event == "PLAYER_LOGOUT" then
         -- Also fires on /reload: the error list is about to be lost.
         pcall(UlSource.DumpErrors, false)
     elseif event == "PLAYER_LOGIN" then
-        UlSource.Say(UlSource.Version() .. " probe build loaded. Loot windows are being recorded; |cffffcc00/us|r for commands.")
+        UlSource.Say(UlSource.Version() .. " loaded. |cffffcc00/us|r for commands.")
         self:UnregisterEvent("PLAYER_LOGIN")
     end
 end)
