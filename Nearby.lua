@@ -156,31 +156,39 @@ local function LearnedAllowed(e, mine)
     return e.seenBy ~= nil and e.seenBy[mine] == true
 end
 
--- Returns the nearest candidate { id, name, x, y, learned, items } on the
--- player's continent, or nil. `shipped` is a list of rows, `pick(row)`
--- returns id, name, faction, continent, x, y, items or nil to skip it.
--- `learnedKind` selects db.nearby entries ("t" or "v") and `accept(entry)`
--- says whether a learned entry fits.
-local function Nearest(shipped, pick, learnedKind, accept, continentID, px, py)
+-- Every usable candidate for this character: shipped rows the player's
+-- faction may use, replaced per NPC by a learned entry when one exists.
+-- `shipped` is a list of rows, `pick(row)` returns id, name, faction,
+-- continent, x, y, items or nil to skip it. `learnedKind` selects db.nearby
+-- entries ("t" or "v") and `accept(entry)` says whether a learned entry
+-- fits. Each candidate: { id, name, continent, x, y, learned, items }.
+local function Candidates(shipped, pick, learnedKind, accept)
     local mine = PlayerFaction()
     local learned = Store.NearbyEntries and Store.NearbyEntries() or {}
-    local best, bestD
-    local function consider(id, name, x, y, isLearned, items)
-        local dx, dy = x - px, y - py
-        local d = dx * dx + dy * dy
-        if not bestD or d < bestD then
-            best, bestD = { id = id, name = name, x = x, y = y, learned = isLearned, items = items }, d
-        end
-    end
+    local list = {}
     for _, row in ipairs(shipped) do
         local id, name, faction, cont, x, y, items = pick(row)
-        if id and cont == continentID and Allowed(faction, mine) and not learned[id] then
-            consider(id, name, x, y, false, items)
+        if id and Allowed(faction, mine) and not learned[id] then
+            list[#list + 1] = { id = id, name = name, continent = cont, x = x, y = y, learned = false, items = items }
         end
     end
     for id, e in pairs(learned) do
-        if e.kind == learnedKind and e.continent == continentID and LearnedAllowed(e, mine) and accept(e) then
-            consider(id, e.name or ("NPC " .. id), e.x, e.y, true, e.items)
+        if e.kind == learnedKind and LearnedAllowed(e, mine) and accept(e) then
+            list[#list + 1] = { id = id, name = e.name or ("NPC " .. id), continent = e.continent, x = e.x, y = e.y,
+                                learned = true, items = e.items }
+        end
+    end
+    return list
+end
+
+-- The nearest candidate on the player's continent, or nil.
+local function Nearest(shipped, pick, learnedKind, accept, continentID, px, py)
+    local best, bestD
+    for _, c in ipairs(Candidates(shipped, pick, learnedKind, accept)) do
+        if c.continent == continentID then
+            local dx, dy = c.x - px, c.y - py
+            local d = dx * dx + dy * dy
+            if not bestD or d < bestD then best, bestD = c, d end
         end
     end
     return best
@@ -248,15 +256,27 @@ end
 local NOT_HERE = "position not readable here (instance or loading screen)"
 
 -- Text for the nearest class trainer, or nil and a reason.
+local function TrainerPickers(class)
+    return function(r) if r[3] == class then return r[1], r[2], r[4], r[5], r[6], r[7] end end,
+           function(e) return e.class == class end
+end
+
+local function VendorPickers(wanted)
+    local function sells(items)
+        for _, id in ipairs(items or {}) do if wanted[id] then return true end end
+        return false
+    end
+    return function(r) if sells(r[7]) then return r[1], r[2], r[3], r[4], r[5], r[6], r[7] end end,
+           function(e) return sells(e.items) end
+end
+
 function UlSource.NearbyTrainerText()
     local class = PlayerClass()
     if not class or not Data() then return nil, "no class data" end
     local continentID, px, py, mapID = PlayerWorld()
     if not continentID then return nil, NOT_HERE end
-    local hit = Nearest(Data().trainers,
-        function(r) if r[3] == class then return r[1], r[2], r[4], r[5], r[6], r[7] end end,
-        "t", function(e) return e.class == class end,
-        continentID, px, py)
+    local pick, accept = TrainerPickers(class)
+    local hit = Nearest(Data().trainers, pick, "t", accept, continentID, px, py)
     local who = (CLASS_NAMES[class] or class:lower()) .. " trainer"
     if not hit then return nil, "no " .. who .. " known on this continent" end
     return Describe(hit, px, py, continentID, mapID), who
@@ -272,14 +292,8 @@ function UlSource.NearbyReagentsText()
     end
     local continentID, px, py, mapID = PlayerWorld()
     if not continentID then return nil, NOT_HERE end
-    local function sells(items)
-        for _, id in ipairs(items or {}) do if wanted[id] then return true end end
-        return false
-    end
-    local hit = Nearest(Data().vendors,
-        function(r) if sells(r[7]) then return r[1], r[2], r[3], r[4], r[5], r[6], r[7] end end,
-        "v", function(e) return sells(e.items) end,
-        continentID, px, py)
+    local pick, accept = VendorPickers(wanted)
+    local hit = Nearest(Data().vendors, pick, "v", accept, continentID, px, py)
     local who = class == "HUNTER" and (label .. " vendor") or "reagent vendor"
     if not hit then
         return nil, "no " .. who .. " known on this continent" .. (class ~= "HUNTER" and label and (" (" .. label .. ")") or "")
@@ -298,6 +312,32 @@ end
 function UlSource.NearestReagentVendor()
     local text, who = UlSource.NearbyReagentsText()
     if text then UlSource.Say("nearest " .. who .. ": " .. text .. ".") else UlSource.Say("reagents: " .. who .. ".") end
+end
+
+-- Every trainer and vendor this character can use, for the map pins:
+-- { kind = "t"|"v", id, name, continent, x, y, learned, detail }, where
+-- detail is "shaman trainer" or "sells Ankh".
+function UlSource.NearbyPoints()
+    local class = PlayerClass()
+    if not class or not Data() then return {} end
+    local list = {}
+    local who = (CLASS_NAMES[class] or class:lower()) .. " trainer"
+    local pick, accept = TrainerPickers(class)
+    for _, c in ipairs(Candidates(Data().trainers, pick, "t", accept)) do
+        c.kind, c.detail = "t", who
+        list[#list + 1] = c
+    end
+    local wanted = WantedItems(class)
+    if next(wanted) then
+        pick, accept = VendorPickers(wanted)
+        for _, c in ipairs(Candidates(Data().vendors, pick, "v", accept)) do
+            local best = c.items and BestWanted(c.items, wanted)
+            c.kind, c.detail = "v", best and ("sells " .. best) or "vendor"
+            c.ammo = class == "HUNTER"
+            list[#list + 1] = c
+        end
+    end
+    return list
 end
 
 ------------------------------------------------------------------------
@@ -441,6 +481,7 @@ local function OnTrainerShow()
     if not rec then return end
     rec.kind, rec.class, rec.name = "t", PlayerClass(), name
     Store.RecordNearby(id, rec)
+    if UlSource.RefreshMapPins then UlSource.RefreshMapPins() end
 end
 
 local function OnMerchantShow()
@@ -462,6 +503,7 @@ local function OnMerchantShow()
     table.sort(items)
     rec.kind, rec.name, rec.items = "v", name, items
     Store.RecordNearby(id, rec)
+    if UlSource.RefreshMapPins then UlSource.RefreshMapPins() end
 end
 
 local frame = CreateFrame("Frame", "UlSourceNearbyFrame")

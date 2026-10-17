@@ -1,6 +1,8 @@
 -- Map Pins: a small icon on the zone map at every point where an object
 -- (herb, ore vein, chest, fishing spot) was looted, for the nodes this
--- character can gather (see "Which pins" below).
+-- character can gather (see "Which pins" below), and a larger icon at
+-- every class trainer and reagent vendor this character can use (from
+-- Nearby.lua, see "Nearby pins" below).
 --
 -- The points come from the store: every "o:" source keeps, per zone, the
 -- map ID the point was taken on and up to 40 distinct points (same spawn
@@ -15,6 +17,10 @@
 -- first finds WorldMapFrame.
 
 local PIN_TEMPLATE = "UlSourceNodePinTemplate"
+local NEARBY_TEMPLATE = "UlSourceNearbyPinTemplate"
+local ICON_TRAINER = "Interface\\Icons\\INV_Misc_Book_09"
+local ICON_VENDOR = "Interface\\Icons\\INV_Misc_Coin_01"
+local ICON_AMMO = "Interface\\Icons\\INV_Ammo_Arrow_02"
 local QUESTION_MARK = 134400
 
 -- Skill line IDs of the gathering professions.
@@ -121,6 +127,70 @@ function UlSourceNodePinMixin:OnAcquired(point)
 end
 
 ------------------------------------------------------------------------
+-- Nearby pins: class trainers and reagent vendors (Nearby.lua), in world
+-- coordinates, projected onto whatever map is open. These take the
+-- mouse: a tooltip with the name and what the NPC is for.
+------------------------------------------------------------------------
+
+UlSourceNearbyPinMixin = CreateFromMixins(MapCanvasPinMixin)
+
+function UlSourceNearbyPinMixin:OnLoad()
+    self:SetScalingLimits(1, 1.0, 1.2)
+    self:UseFrameLevelType("PIN_FRAME_LEVEL_FLIGHT_POINT")
+end
+
+function UlSourceNearbyPinMixin:OnAcquired(entry, x, y)
+    self.entry = entry
+    local icon = entry.kind == "t" and ICON_TRAINER or (entry.ammo and ICON_AMMO or ICON_VENDOR)
+    self.Icon:SetTexture(icon)
+    self.Icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    self.Ring:SetVertexColor(entry.learned and 0.3 or 0, entry.learned and 0.8 or 0, 0, 0.9)
+    self:SetPosition(x, y)
+end
+
+function UlSourceNearbyPinMixin:OnMouseEnter()
+    local e = self.entry
+    if not e then return end
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(e.name, 1, 1, 1)
+    GameTooltip:AddLine(e.detail .. (e.learned and ", visited" or ""), 0.8, 0.8, 0.8)
+    GameTooltip:Show()
+end
+
+function UlSourceNearbyPinMixin:OnMouseLeave()
+    GameTooltip:Hide()
+end
+
+-- Continent and zone maps only: the Azeroth and cosmic maps span more than
+-- one continent and have no single world coordinate system.
+local function ContinentOf(mapID)
+    local info = C_Map.GetMapInfo(mapID)
+    local worldType = Enum.UIMapType and Enum.UIMapType.World
+    local cosmicType = Enum.UIMapType and Enum.UIMapType.Cosmic
+    if not info or info.mapType == worldType or info.mapType == cosmicType then return nil end
+    local continentID = C_Map.GetWorldPosFromMapPos(mapID, CreateVector2D(0.5, 0.5))
+    continentID = UlSource.Plain(continentID)
+    return type(continentID) == "number" and continentID or nil
+end
+
+local function AddNearbyPins(map, mapID)
+    if not UlSource.NearbyPoints or not UlSource.db.settings.nearbyPins then return end
+    local continentID = ContinentOf(mapID)
+    if not continentID then return end
+    for _, entry in ipairs(UlSource.NearbyPoints()) do
+        if entry.continent == continentID then
+            local _, pos = C_Map.GetMapPosFromWorldPos(continentID, CreateVector2D(entry.x, entry.y), mapID)
+            if pos then
+                local x, y = pos:GetXY()
+                if type(x) == "number" and type(y) == "number" and x >= 0 and x <= 1 and y >= 0 and y <= 1 then
+                    map:AcquirePin(NEARBY_TEMPLATE, entry, x, y)
+                end
+            end
+        end
+    end
+end
+
+------------------------------------------------------------------------
 -- Data provider
 ------------------------------------------------------------------------
 
@@ -128,6 +198,7 @@ local ProviderMixin = CreateFromMixins(MapCanvasDataProviderMixin)
 
 function ProviderMixin:RemoveAllData()
     self:GetMap():RemoveAllPinsByTemplate(PIN_TEMPLATE)
+    self:GetMap():RemoveAllPinsByTemplate(NEARBY_TEMPLATE)
 end
 
 function ProviderMixin:RefreshAllData()
@@ -144,6 +215,8 @@ function ProviderMixin:RefreshAllData()
     for _, point in ipairs(points) do
         if Wanted(point) then map:AcquirePin(PIN_TEMPLATE, point) end
     end
+    local okNearby, err = pcall(AddNearbyPins, map, mapID)
+    if not okNearby then UlSource.Say("nearby pins: " .. tostring(err)) end
 end
 
 function UlSource.RefreshMapPins()

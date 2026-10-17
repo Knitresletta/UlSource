@@ -21,4 +21,34 @@
 			</Layer>
 		</Layers>
 	</Frame>
+	<Frame name="UlSourceNearbyPinTemplate" enableMouseMotion="true" enableMouseClicks="false" mixin="UlSourceNearbyPinMixin" virtual="true">
+		<Size x="16" y="16"/>
+		<Layers>
+			<Layer level="BACKGROUND">
+				<Texture parentKey="Ring" file="Interface\Minimap\UI-Minimap-Background">
+					<Anchors>
+						<Anchor point="TOPLEFT" x="-2" y="2"/>
+						<Anchor point="BOTTOMRIGHT" x="2" y="-2"/>
+					</Anchors>
+				</Texture>
+			</Layer>
+			<Layer level="ARTWORK">
+				<Texture parentKey="Icon">
+					<Anchors>
+						<Anchor point="TOPLEFT"/>
+						<Anchor point="BOTTOMRIGHT"/>
+					</Anchors>
+				</Texture>
+				<MaskTexture parentKey="Mask" file="Interface\CharacterFrame\TempPortraitAlphaMask">
+					<Anchors>
+						<Anchor point="TOPLEFT"/>
+						<Anchor point="BOTTOMRIGHT"/>
+					</Anchors>
+					<MaskedTextures>
+						<MaskedTexture childKey="Icon"/>
+					</MaskedTextures>
+				</MaskTexture>
+			</Layer>
+		</Layers>
+	</Frame>
 </Ui>

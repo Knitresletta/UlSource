@@ -14,6 +14,7 @@ local DEFAULTS = {
     showIDs = false,  -- append the NPC or object ID to known names
     mapPins = true,   -- icons on the zone map where objects were looted
     pinsAll = false,  -- also nodes for professions this character does not have
+    nearbyPins = true, -- class trainers and reagent vendors on the map (Nearby.lua)
     probe   = false,  -- keep the raw per-window probe records (Probe.lua)
     quiet   = false,  -- no chat line per probe record
 }
@@ -164,6 +165,7 @@ local function PrintHelp()
     print("  /us trainer: the nearest class trainer from where you stand")
     print("  /us reagents: the nearest vendor with your class reagents (hunters: ammo for your weapon)")
     print("  /us nearby: a small window with both, refreshed as you move (also in the Ul minimap menu)")
+    print("  /us nearbypins: trainers and reagent vendors for this character on the map (now " .. OnOff(st.nearbyPins) .. ")")
     print("  /us nearbyreset: forget the trainers and vendors learned from visits (the shipped table stays)")
     print("  /us nearbyforget: forget what was learned about the targeted NPC")
     print("  /us toggle: recording and tooltip lines on or off")
@@ -233,6 +235,10 @@ SlashCmdList["ULSOURCE"] = function(msg)
             local n = UlSource.Store.ForgetNearbyWhere(function(id) return id == parsed.id end)
             UlSource.Say(n > 0 and ("forgot what was learned about NPC " .. parsed.id .. ".") or ("nothing learned about NPC " .. parsed.id .. "."))
         end
+    elseif cmd == "nearbypins" then
+        st.nearbyPins = not st.nearbyPins
+        if UlSource.RefreshMapPins then UlSource.RefreshMapPins() end
+        UlSource.Say("trainer and vendor pins " .. OnOff(st.nearbyPins) .. ".")
     elseif cmd == "nearbyreset" then
         local n = UlSource.Store.ClearNearby()
         UlSource.Say("forgot " .. n .. " visited trainer(s) and vendor(s); the shipped positions remain.")

@@ -4,7 +4,7 @@ Where did this come from? An addon for **World of Warcraft: Forever** that recor
 
 A separate addon from [UlRemedyForever](https://github.com/Knitresletta/UlRemedyForever). Same author, same style, no shared code. UlRemedyForever is a set of small fixes that remember nothing; UlSource is a database that grows every time you loot.
 
-> **Status:** 0.6.2: records loot, shows sources in tooltips, browser window with a seat in the Ul minimap menu, icons on the zone map where objects were looted, `/us trainer` and `/us reagents` for the nearest class trainer and reagent or ammo vendor (positions from 1.12 data, not yet verified against Forever in play). Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever beta (build 1.60.1, interface `16001`).
+> **Status:** 0.7.0: records loot, shows sources in tooltips, browser window with a seat in the Ul minimap menu, icons on the zone map where objects were looted, `/us trainer`, `/us reagents`, the nearby window and trainer and vendor pins on the map (positions from 1.12 data; chat and window confirmed in play 17.10.2026, pins not yet). Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever beta (build 1.60.1, interface `16001`).
 
 ## Why
 
@@ -196,6 +196,7 @@ UlSourceDB.probe = ...     -- raw probe records, only while /us probe is on; the
 | `/us trainer` | Nearest class trainer from where you stand |
 | `/us reagents` (or `ammo`) | Nearest vendor with your class reagents, or ammo for a hunter's equipped weapon |
 | `/us nearby` | Small window with both answers, refreshed every 3 seconds while open (also a row in the Ul minimap menu) |
+| `/us nearbypins` | Trainers and reagent vendors for this character as icons on the map (default on) |
 | `/us nearbyreset` | Forget the trainers and vendors learned from visits; the shipped positions stay |
 | `/us nearbyforget` | Forget what was learned about the targeted NPC |
 | `/us ids` | Show NPC and object IDs next to known names |
@@ -233,6 +234,8 @@ Forever may have moved, removed or added NPCs, and the 1.12 positions are not ve
 ### Map pins
 
 With Map pins on (default), every zone map shows a round 8 px icon at each point an object was looted: herbs, ore veins, chests and fishing spots, with the icon of the item that object last gave. Nodes are shown only for the professions this character has: herbs need Herbalism, ore needs Mining, fishing spots need Fishing (the item's class from `C_Item.GetItemInfoInstant` says which, the object ID says what is a fishing spot). Chests are always shown. `/us pinsall` shows every node regardless. The pins take no mouse input, so there is no tooltip and the map underneath is unchanged; the window and the item tooltips are where the numbers live. Points taken before 0.4.0 have no map ID stored; they are matched to a map by zone name the first time the map asks, so they show too. `/us pins` or the checkbox turns them off.
+
+With Nearby pins on (default, `/us nearbypins`), the same maps also show every class trainer for this character's class and faction, and every vendor with its reagents or ammo, as 16 px icons with a dark ring: a book for trainers, a coin for reagent vendors, an arrow for ammo vendors. Learned NPCs get a green ring. These pins take the mouse: hovering shows the name and what the NPC is for, and "visited" when it was learned. Positions are world coordinates projected onto the open map with `C_Map.GetMapPosFromWorldPos`, so they appear on zone and continent maps alike and never on the Azeroth or cosmic maps. Node pins stay mouse-less (see 0.5.1); the trainer and vendor pins use the same mouse-enabled pattern as UlRemedyForever's flight paths, which works on Forever.
 
 ### Minimap
 
