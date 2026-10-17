@@ -9,6 +9,8 @@
 --                    how many windows it appeared in and the total amount.
 --   db.names.c/.o    names learned in play, by NPC or object ID. They win
 --                    over the shipped NameData.lua table.
+--   db.nearby[npcID] class trainers and reagent vendors visited, with the
+--                    position seen. They win over NearbyData.lua.
 --
 -- Nothing is stored per loot. The drop rate of an item from a source is
 -- items[id].sources[key].n / sources[key].windows, both counted from the
@@ -67,6 +69,7 @@ function Store.Init()
     db.names.c = db.names.c or {}
     db.names.o = db.names.o or {}
     db.unattributed = db.unattributed or 0
+    db.nearby = db.nearby or {}
 end
 
 ------------------------------------------------------------------------
@@ -176,6 +179,19 @@ function Store.LearnName(kind, id, name)
     return true
 end
 
+-- A visited class trainer or reagent vendor, by NPC ID (Nearby.lua):
+-- { kind = "t"|"v", name, class?, items?, faction, continent, x, y, last }.
+-- Overwrites: the newest visit is the truth about where the NPC stands.
+function Store.RecordNearby(npcID, rec)
+    if not db or not npcID or not rec then return end
+    rec.last = time()
+    db.nearby[npcID] = rec
+end
+
+function Store.NearbyEntries()
+    return db and db.nearby or {}
+end
+
 function Store.ClearItem(itemID)
     if not db or not db.items[itemID] then return false end
     db.items[itemID] = nil
@@ -188,6 +204,7 @@ function Store.ClearAll()
     wipe(db.items)
     wipe(db.names.c)
     wipe(db.names.o)
+    wipe(db.nearby)
     db.unattributed = 0
 end
 
