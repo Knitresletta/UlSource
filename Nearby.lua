@@ -1,6 +1,7 @@
--- Nearby: "/us trainer" and "/us reagents". From where the player stands,
--- the nearest class trainer, and the nearest vendor that sells this
--- class's spell reagents (hunters: ammo for the equipped ranged weapon).
+-- Nearby: "/us trainer", "/us reagents" and a small window with both
+-- (/us nearby, or its row in the Ul minimap menu). From where the player
+-- stands, the nearest class trainer, and the nearest vendor that sells
+-- this class's spell reagents (hunters: ammo for the equipped weapon).
 --
 -- Positions come from NearbyData.lua (vmangos 1.12, built by
 -- tools/build_nearby.py) in world coordinates, and from NPCs this account
@@ -147,6 +148,14 @@ local function Allowed(faction, mine)
     return faction == "N" or faction == nil or faction == mine
 end
 
+-- A learned entry is usable by a faction the shipped table allows, or by
+-- any faction that has actually opened its window (seenBy), so a neutral
+-- vendor visited by a Horde character stays visible to Alliance ones.
+local function LearnedAllowed(e, mine)
+    if e.faction and Allowed(e.faction, mine) then return true end
+    return e.seenBy ~= nil and e.seenBy[mine] == true
+end
+
 -- Returns the nearest candidate { id, name, x, y, learned, items } on the
 -- player's continent, or nil. `shipped` is a list of rows, `pick(row)`
 -- returns id, name, faction, continent, x, y, items or nil to skip it.
@@ -170,7 +179,7 @@ local function Nearest(shipped, pick, learnedKind, accept, continentID, px, py)
         end
     end
     for id, e in pairs(learned) do
-        if e.kind == learnedKind and e.continent == continentID and Allowed(e.faction, mine) and accept(e) then
+        if e.kind == learnedKind and e.continent == continentID and LearnedAllowed(e, mine) and accept(e) then
             consider(id, e.name or ("NPC " .. id), e.x, e.y, true, e.items)
         end
     end
@@ -236,37 +245,33 @@ end
 -- Commands
 ------------------------------------------------------------------------
 
-local function Unavailable(what)
-    UlSource.Say(what .. ": your position is not readable here (instance or loading screen).")
-end
+local NOT_HERE = "position not readable here (instance or loading screen)"
 
-function UlSource.NearestTrainer()
+-- Text for the nearest class trainer, or nil and a reason.
+function UlSource.NearbyTrainerText()
     local class = PlayerClass()
-    if not class or not Data() then return end
+    if not class or not Data() then return nil, "no class data" end
     local continentID, px, py, mapID = PlayerWorld()
-    if not continentID then return Unavailable("trainer") end
+    if not continentID then return nil, NOT_HERE end
     local hit = Nearest(Data().trainers,
         function(r) if r[3] == class then return r[1], r[2], r[4], r[5], r[6], r[7] end end,
         "t", function(e) return e.class == class end,
         continentID, px, py)
     local who = (CLASS_NAMES[class] or class:lower()) .. " trainer"
-    if not hit then
-        UlSource.Say("no " .. who .. " known on this continent.")
-        return
-    end
-    UlSource.Say("nearest " .. who .. ": " .. Describe(hit, px, py, continentID, mapID) .. ".")
+    if not hit then return nil, "no " .. who .. " known on this continent" end
+    return Describe(hit, px, py, continentID, mapID), who
 end
 
-function UlSource.NearestReagentVendor()
+-- Text for the nearest reagent (or ammo) vendor, or nil and a reason.
+function UlSource.NearbyReagentsText()
     local class = PlayerClass()
-    if not class or not Data() then return end
+    if not class or not Data() then return nil, "no class data" end
     local wanted, label = WantedItems(class)
     if not next(wanted) then
-        UlSource.Say((CLASS_NAMES[class] or class:lower()) .. "s buy no reagents from vendors.")
-        return
+        return nil, (CLASS_NAMES[class] or class:lower()) .. "s buy no reagents from vendors"
     end
     local continentID, px, py, mapID = PlayerWorld()
-    if not continentID then return Unavailable("reagents") end
+    if not continentID then return nil, NOT_HERE end
     local function sells(items)
         for _, id in ipairs(items or {}) do if wanted[id] then return true end end
         return false
@@ -277,13 +282,106 @@ function UlSource.NearestReagentVendor()
         continentID, px, py)
     local who = class == "HUNTER" and (label .. " vendor") or "reagent vendor"
     if not hit then
-        UlSource.Say("no " .. who .. " known on this continent" .. (label and class ~= "HUNTER" and (" (" .. label .. ")") or "") .. ".")
-        return
+        return nil, "no " .. who .. " known on this continent" .. (class ~= "HUNTER" and label and (" (" .. label .. ")") or "")
     end
     local best = hit.items and BestWanted(hit.items, wanted)
     local text = Describe(hit, px, py, continentID, mapID)
     if best then text = text .. " (sells " .. best .. ")" end
-    UlSource.Say("nearest " .. who .. ": " .. text .. ".")
+    return text, who
+end
+
+function UlSource.NearestTrainer()
+    local text, who = UlSource.NearbyTrainerText()
+    if text then UlSource.Say("nearest " .. who .. ": " .. text .. ".") else UlSource.Say("trainer: " .. who .. ".") end
+end
+
+function UlSource.NearestReagentVendor()
+    local text, who = UlSource.NearbyReagentsText()
+    if text then UlSource.Say("nearest " .. who .. ": " .. text .. ".") else UlSource.Say("reagents: " .. who .. ".") end
+end
+
+------------------------------------------------------------------------
+-- Window: the two answers, refreshed while open. A row in the Ul minimap
+-- menu (UlRemedyForever owns the button) and /us nearby open it.
+------------------------------------------------------------------------
+
+local ICON = "Interface\\AddOns\\UlSource\\media\\icon"
+local REFRESH_SECONDS = 3
+local WIN_W, WIN_H = 420, 128
+
+local nearbyWindow, ticker
+
+local function RefreshNearbyWindow()
+    local w = nearbyWindow
+    if not w or not w:IsShown() then return end
+    local function fill(line, fn, label)
+        local text, who = fn()
+        if text then
+            line.title:SetText(label .. " |cffaaaaaa(" .. who .. ")|r")
+            line.text:SetText(text)
+        else
+            line.title:SetText(label)
+            line.text:SetText("|cff999999" .. who .. "|r")
+        end
+    end
+    fill(w.trainer, UlSource.NearbyTrainerText, "Nearest trainer")
+    fill(w.vendor, UlSource.NearbyReagentsText, "Nearest reagents")
+end
+
+local function MakeLine(parent, yOffset)
+    local line = {}
+    line.title = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    line.title:SetPoint("TOPLEFT", 14, yOffset)
+    line.title:SetJustifyH("LEFT")
+    line.text = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    line.text:SetPoint("TOPLEFT", line.title, "BOTTOMLEFT", 0, -3)
+    line.text:SetPoint("RIGHT", parent, "RIGHT", -14, 0)
+    line.text:SetJustifyH("LEFT")
+    line.text:SetWordWrap(true)
+    return line
+end
+
+local function CreateNearbyWindow()
+    local f = CreateFrame("Frame", "UlSourceNearbyWindow", UIParent, "BasicFrameTemplateWithInset")
+    f:SetSize(WIN_W, WIN_H)
+    f:SetPoint("CENTER", 0, 200)
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
+    f:SetClampedToScreen(true)
+    f:SetFrameStrata("HIGH")
+    tinsert(UISpecialFrames, "UlSourceNearbyWindow")
+    if f.CloseButton then f.CloseButton:SetScript("OnClick", function() f:Hide() end) end
+    local title = f.TitleText or (f.TitleContainer and f.TitleContainer.TitleText)
+    if title then title:SetText("UlSource: nearby") end
+    f.trainer = MakeLine(f, -32)
+    f.vendor = MakeLine(f, -78)
+    f:SetScript("OnShow", function()
+        RefreshNearbyWindow()
+        if C_Timer and C_Timer.NewTicker and not ticker then
+            ticker = C_Timer.NewTicker(REFRESH_SECONDS, function() pcall(RefreshNearbyWindow) end)
+        end
+    end)
+    f:SetScript("OnHide", function()
+        if ticker then ticker:Cancel(); ticker = nil end
+    end)
+    f:Hide()   -- a new frame is shown by default; the toggle must show it
+    return f
+end
+
+function UlSource.ToggleNearbyWindow()
+    if not UlSource.db then return end
+    if not nearbyWindow then
+        local ok, err = pcall(CreateNearbyWindow)
+        if not ok then
+            UlSource.Say("could not build the nearby window: " .. tostring(err))
+            return
+        end
+        nearbyWindow = err
+    end
+    if nearbyWindow:IsShown() then nearbyWindow:Hide() else nearbyWindow:Show() end
 end
 
 ------------------------------------------------------------------------
@@ -309,11 +407,27 @@ local function NPC()
     return parsed.id, name
 end
 
-local function Here()
+-- The faction the shipped table gives an NPC ("A", "H", "N"), or nil
+-- when the NPC is not in it.
+local function ShippedFaction(id)
+    local D = Data()
+    for _, r in ipairs(D.trainers) do if r[1] == id then return r[4] end end
+    for _, r in ipairs(D.vendors) do if r[1] == id then return r[3] end end
+    return nil
+end
+
+-- The record for a visit: position now, the NPC's faction from the shipped
+-- table (not the player's, a neutral vendor must stay neutral), and the
+-- set of player factions that have opened its window.
+local function Here(id)
     local continentID, x, y = PlayerWorld()
     if not continentID then return nil end
+    local old = Store.NearbyEntries()[id]
+    local seenBy = old and old.seenBy or {}
+    local mine = PlayerFaction()
+    if mine then seenBy[mine] = true end
     return { continent = continentID, x = math.floor(x * 10 + 0.5) / 10, y = math.floor(y * 10 + 0.5) / 10,
-             faction = PlayerFaction() }
+             faction = ShippedFaction(id), seenBy = seenBy }
 end
 
 local function OnTrainerShow()
@@ -323,7 +437,7 @@ local function OnTrainerShow()
     if n == 0 then return end
     local id, name = NPC()
     if not id or Data().petTrainers[id] then return end
-    local rec = Here()
+    local rec = Here(id)
     if not rec then return end
     rec.kind, rec.class, rec.name = "t", PlayerClass(), name
     Store.RecordNearby(id, rec)
@@ -343,7 +457,7 @@ local function OnMerchantShow()
     if #items == 0 then return end
     local id, name = NPC()
     if not id then return end
-    local rec = Here()
+    local rec = Here(id)
     if not rec then return end
     table.sort(items)
     rec.kind, rec.name, rec.items = "v", name, items
@@ -353,8 +467,19 @@ end
 local frame = CreateFrame("Frame", "UlSourceNearbyFrame")
 frame:RegisterEvent("TRAINER_SHOW")
 frame:RegisterEvent("MERCHANT_SHOW")
-frame:SetScript("OnEvent", function(_, event)
-    if event == "TRAINER_SHOW" then
+frame:RegisterEvent("PLAYER_LOGIN")
+frame:SetScript("OnEvent", function(self, event)
+    if event == "PLAYER_LOGIN" then
+        if UlRemedy and type(UlRemedy.Register) == "function" then
+            pcall(UlRemedy.Register, {
+                id = "UlSourceNearby",
+                title = "UlSource: nearby",
+                icon = ICON,
+                open = UlSource.ToggleNearbyWindow,
+            })
+        end
+        self:UnregisterEvent("PLAYER_LOGIN")
+    elseif event == "TRAINER_SHOW" then
         local ok, err = pcall(OnTrainerShow)
         if not ok then Report("trainer", err) end
     elseif event == "MERCHANT_SHOW" then

@@ -163,6 +163,7 @@ local function PrintHelp()
     print("  /us stats: how much is known (sources, items, names)")
     print("  /us trainer: the nearest class trainer from where you stand")
     print("  /us reagents: the nearest vendor with your class reagents (hunters: ammo for your weapon)")
+    print("  /us nearby: a small window with both, refreshed as you move (also in the Ul minimap menu)")
     print("  /us toggle: recording and tooltip lines on or off")
     print("  /us lines <1-10>: sources per tooltip (now " .. tostring(st.lines) .. ")")
     print("  /us ids: show NPC and object IDs next to known names (now " .. OnOff(st.showIDs) .. ")")
@@ -220,6 +221,8 @@ SlashCmdList["ULSOURCE"] = function(msg)
     elseif cmd == "trainer" then
         local ok, err = pcall(UlSource.NearestTrainer)
         if not ok then UlSource.Say("trainer: " .. tostring(err)) end
+    elseif cmd == "nearby" then
+        if UlSource.ToggleNearbyWindow then UlSource.ToggleNearbyWindow() end
     elseif cmd == "reagents" or cmd == "ammo" or cmd == "vendor" then
         local ok, err = pcall(UlSource.NearestReagentVendor)
         if not ok then UlSource.Say("reagents: " .. tostring(err)) end

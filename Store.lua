@@ -180,7 +180,9 @@ function Store.LearnName(kind, id, name)
 end
 
 -- A visited class trainer or reagent vendor, by NPC ID (Nearby.lua):
--- { kind = "t"|"v", name, class?, items?, faction, continent, x, y, last }.
+-- { kind = "t"|"v", name, class?, items?, faction?, seenBy, continent, x, y, last }.
+-- faction is the shipped table's ("A", "H", "N") or nil for an unknown NPC;
+-- seenBy holds the player factions that have opened its window.
 -- Overwrites: the newest visit is the truth about where the NPC stands.
 function Store.RecordNearby(npcID, rec)
     if not db or not npcID or not rec then return end

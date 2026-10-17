@@ -4,7 +4,7 @@ Where did this come from? An addon for **World of Warcraft: Forever** that recor
 
 A separate addon from [UlRemedyForever](https://github.com/Knitresletta/UlRemedyForever). Same author, same style, no shared code. UlRemedyForever is a set of small fixes that remember nothing; UlSource is a database that grows every time you loot.
 
-> **Status:** 0.6.0: records loot, shows sources in tooltips, browser window with a seat in the Ul minimap menu, icons on the zone map where objects were looted, `/us trainer` and `/us reagents` for the nearest class trainer and reagent or ammo vendor (positions from 1.12 data, not yet verified against Forever in play). Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever beta (build 1.60.1, interface `16001`).
+> **Status:** 0.6.1: records loot, shows sources in tooltips, browser window with a seat in the Ul minimap menu, icons on the zone map where objects were looted, `/us trainer` and `/us reagents` for the nearest class trainer and reagent or ammo vendor (positions from 1.12 data, not yet verified against Forever in play). Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever beta (build 1.60.1, interface `16001`).
 
 ## Why
 
@@ -195,6 +195,7 @@ UlSourceDB.probe = ...     -- raw probe records, only while /us probe is on; the
 | `/us lines <1-10>` | Sources per tooltip (default 3) |
 | `/us trainer` | Nearest class trainer from where you stand |
 | `/us reagents` (or `ammo`) | Nearest vendor with your class reagents, or ammo for a hunter's equipped weapon |
+| `/us nearby` | Small window with both answers, refreshed every 3 seconds while open (also a row in the Ul minimap menu) |
 | `/us ids` | Show NPC and object IDs next to known names |
 | `/us pins` | Icons on the zone map where objects were looted |
 | `/us pinsall` | Also show nodes for professions this character does not have |
@@ -221,9 +222,11 @@ UlSource: nearest shaman trainer: Kardris Dreamseeker, Orgrimmar 38,36, 153 yd n
 UlSource: nearest reagent vendor: Hagrus, Orgrimmar 39,37, 53 yd north-east (sells Ankh).
 ```
 
+`/us nearby`, or the "UlSource: nearby" row in the Ul minimap button's menu, opens a small window with the same two answers, refreshed every 3 seconds while it is open so the distance and direction follow you. Escape closes it, it can be dragged.
+
 Positions are world coordinates from `NearbyData.lua`, built by `tools/build_nearby.py` from the vmangos 1.12 database: 254 class trainers and 176 vendors, one row per spawn point, with faction. The player's own world position comes from `C_Map.GetWorldPosFromMapPos`, and the point is projected back onto the continent map to name the zone. Inside instances the map ID is secret and the command says so.
 
-Forever may have moved, removed or added NPCs, and the 1.12 positions are not verified against Forever in play. The correction is learning: opening a class trainer window, or a merchant window that has a reagent or ammo in it, stores that NPC with the player's position in `UlSourceDB.nearby`, and a learned entry wins over the shipped rows for the same NPC. Profession trainers (`IsTradeskillTrainer`) and pet trainers (a shipped ID list) are not learned as class trainers. Nothing else about a vendor is read or kept.
+Forever may have moved, removed or added NPCs, and the 1.12 positions are not verified against Forever in play. The correction is learning: opening a class trainer window, or a merchant window that has a reagent or ammo in it, stores that NPC with the player's position in `UlSourceDB.nearby`, and a learned entry wins over the shipped rows for the same NPC. Its faction is the shipped table's, not the visiting character's, so a neutral vendor stays neutral, and the entry also remembers which player factions have opened its window: an NPC unknown to the table is offered to the factions that have actually used it. The database is account-wide, so this matters with characters on both sides. Profession trainers (`IsTradeskillTrainer`) and pet trainers (a shipped ID list) are not learned as class trainers. Nothing else about a vendor is read or kept.
 
 ### Map pins
 
@@ -231,7 +234,7 @@ With Map pins on (default), every zone map shows a round 8 px icon at each point
 
 ### Minimap
 
-UlSource has no minimap button of its own. UlRemedyForever owns the one Ul minimap button (since its 1.15.0): left-click opens its options, right-click opens a menu with one row per installed Ul addon. UlSource registers itself into that menu at `PLAYER_LOGIN`:
+UlSource has no minimap button of its own. UlRemedyForever owns the one Ul minimap button (since its 1.15.0): left-click opens its options, right-click opens a menu with one row per installed Ul addon. UlSource registers two rows into that menu at `PLAYER_LOGIN`, the browser window and the nearby window (`Nearby.lua` registers the second one the same way, id `UlSourceNearby`):
 
 ```lua
 if UlRemedy and type(UlRemedy.Register) == "function" then

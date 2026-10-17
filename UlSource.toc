@@ -2,7 +2,7 @@
 ## Title: UlSource
 ## Notes: Records where your materials come from (mob drops, gathering nodes, chests, skinning) and shows it in the item tooltip: top sources, drop rate, zone and coordinates, last seen. Icons on the zone map where herbs, ore, chests and fish were found. /us trainer and /us reagents point to the nearest class trainer and reagent or ammo vendor. Everything comes from your own looting.
 ## Author: knitresletta
-## Version: 0.6.0
+## Version: 0.6.1
 ## Category: Knitresletta
 ## IconTexture: Interface\AddOns\UlSource\media\icon
 ## SavedVariables: UlSourceDB
