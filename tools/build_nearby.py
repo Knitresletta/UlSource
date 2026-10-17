@@ -147,7 +147,11 @@ def main():
 
     trainers = read_templates(conn, "t.trainer_type = 0 and t.trainer_class in (%s)"
                               % ",".join(str(c) for c in CLASS_BY_TRAINER_CLASS))
-    pet_trainers = read_templates(conn, "t.trainer_type = 3")
+    # Everything that opens a trainer window without being a class trainer:
+    # trainer types 1 to 3 (mounts, tradeskills and weapon masters, pets) and
+    # every NPC with the trainer flag (npc_flags bit 16) outside the class set.
+    other_trainers = read_templates(conn, "t.trainer_type in (1, 2, 3) or ((t.npc_flags & 16) "
+                                          "and not (t.trainer_type = 0 and t.trainer_class > 0))")
     vendors = read_templates(conn, "t.entry in (%s)" % ",".join(str(e) for e in vendor_items))
     spawns = read_spawns(conn, set(trainers) | set(vendors))
 
@@ -190,16 +194,17 @@ def main():
             out.write("{%d,%s,%s,%d,%s,%s,{%s}},\n" % (entry, lua_string(name), lua_string(faction), cont, x, y,
                                                       ",".join(str(i) for i in items)))
         out.write("},\n")
-        out.write("-- pet trainers (hunter), so a visit to one is not learned as a class trainer\n")
-        out.write("petTrainers = {\n")
-        for entry in sorted(pet_trainers):
+        out.write("-- trainers that are not class trainers (mounts, weapon masters and professions, pets),\n"
+                  "-- so a visit to one is never learned as a class trainer\n")
+        out.write("notClassTrainers = {\n")
+        for entry in sorted(other_trainers):
             out.write("[%d]=true,\n" % entry)
         out.write("},\n")
         out.write("}\n")
 
-    print("trainers: %d NPCs, %d spawns; vendors: %d NPCs, %d spawns; %d reagents, %d ammo; %d pet trainers"
+    print("trainers: %d NPCs, %d spawns; vendors: %d NPCs, %d spawns; %d reagents, %d ammo; %d other trainers excluded"
           % (len(trainers), len(trainer_rows), len(vendors), len(vendor_rows), len(reagents), len(ammo),
-             len(pet_trainers)), file=sys.stderr)
+             len(other_trainers)), file=sys.stderr)
 
 
 if __name__ == "__main__":

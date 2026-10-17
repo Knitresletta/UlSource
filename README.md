@@ -4,7 +4,7 @@ Where did this come from? An addon for **World of Warcraft: Forever** that recor
 
 A separate addon from [UlRemedyForever](https://github.com/Knitresletta/UlRemedyForever). Same author, same style, no shared code. UlRemedyForever is a set of small fixes that remember nothing; UlSource is a database that grows every time you loot.
 
-> **Status:** 0.6.1: records loot, shows sources in tooltips, browser window with a seat in the Ul minimap menu, icons on the zone map where objects were looted, `/us trainer` and `/us reagents` for the nearest class trainer and reagent or ammo vendor (positions from 1.12 data, not yet verified against Forever in play). Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever beta (build 1.60.1, interface `16001`).
+> **Status:** 0.6.2: records loot, shows sources in tooltips, browser window with a seat in the Ul minimap menu, icons on the zone map where objects were looted, `/us trainer` and `/us reagents` for the nearest class trainer and reagent or ammo vendor (positions from 1.12 data, not yet verified against Forever in play). Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever beta (build 1.60.1, interface `16001`).
 
 ## Why
 
@@ -196,6 +196,8 @@ UlSourceDB.probe = ...     -- raw probe records, only while /us probe is on; the
 | `/us trainer` | Nearest class trainer from where you stand |
 | `/us reagents` (or `ammo`) | Nearest vendor with your class reagents, or ammo for a hunter's equipped weapon |
 | `/us nearby` | Small window with both answers, refreshed every 3 seconds while open (also a row in the Ul minimap menu) |
+| `/us nearbyreset` | Forget the trainers and vendors learned from visits; the shipped positions stay |
+| `/us nearbyforget` | Forget what was learned about the targeted NPC |
 | `/us ids` | Show NPC and object IDs next to known names |
 | `/us pins` | Icons on the zone map where objects were looted |
 | `/us pinsall` | Also show nodes for professions this character does not have |
@@ -226,7 +228,7 @@ UlSource: nearest reagent vendor: Hagrus, Orgrimmar 39,37, 53 yd north-east (sel
 
 Positions are world coordinates from `NearbyData.lua`, built by `tools/build_nearby.py` from the vmangos 1.12 database: 254 class trainers and 176 vendors, one row per spawn point, with faction. The player's own world position comes from `C_Map.GetWorldPosFromMapPos`, and the point is projected back onto the continent map to name the zone. Inside instances the map ID is secret and the command says so.
 
-Forever may have moved, removed or added NPCs, and the 1.12 positions are not verified against Forever in play. The correction is learning: opening a class trainer window, or a merchant window that has a reagent or ammo in it, stores that NPC with the player's position in `UlSourceDB.nearby`, and a learned entry wins over the shipped rows for the same NPC. Its faction is the shipped table's, not the visiting character's, so a neutral vendor stays neutral, and the entry also remembers which player factions have opened its window: an NPC unknown to the table is offered to the factions that have actually used it. The database is account-wide, so this matters with characters on both sides. Profession trainers (`IsTradeskillTrainer`) and pet trainers (a shipped ID list) are not learned as class trainers. Nothing else about a vendor is read or kept.
+Forever may have moved, removed or added NPCs, and the 1.12 positions are not verified against Forever in play. The correction is learning: opening a class trainer window, or a merchant window that has a reagent or ammo in it, stores that NPC with the player's position in `UlSourceDB.nearby`, and a learned entry wins over the shipped rows for the same NPC. Its faction is the shipped table's, not the visiting character's, so a neutral vendor stays neutral, and the entry also remembers which player factions have opened its window: an NPC unknown to the table is offered to the factions that have actually used it. The database is account-wide, so this matters with characters on both sides. Trainers that are not class trainers are never learned as one: the game's own tradeskill flag (`IsTradeskillTrainer`) plus a shipped list of every 1.12 NPC that opens a trainer window without being a class trainer (trainer types mounts, weapon masters and professions, pets, and anything else carrying the trainer flag), 338 IDs. A Forever-new trainer of another kind can still slip through; `/us nearbyforget` with it targeted removes it. Entries 0.6.0 and 0.6.1 learned wrongly from a weapon master are dropped at login. `/us nearbyreset` forgets all learned entries and keeps the table. Nothing else about a vendor is read or kept.
 
 ### Map pins
 

@@ -436,7 +436,7 @@ local function OnTrainerShow()
     local n = GetNumTrainerServices and tonumber(Plain(GetNumTrainerServices())) or 0
     if n == 0 then return end
     local id, name = NPC()
-    if not id or Data().petTrainers[id] then return end
+    if not id or Data().notClassTrainers[id] then return end
     local rec = Here(id)
     if not rec then return end
     rec.kind, rec.class, rec.name = "t", PlayerClass(), name
@@ -470,6 +470,11 @@ frame:RegisterEvent("MERCHANT_SHOW")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:SetScript("OnEvent", function(self, event)
     if event == "PLAYER_LOGIN" then
+        -- 0.6.0 and 0.6.1 learned weapon masters and riding trainers as
+        -- class trainers; drop such entries once the table knows better.
+        if Data() and Store.ForgetNearbyWhere then
+            pcall(Store.ForgetNearbyWhere, function(id, e) return e.kind == "t" and Data().notClassTrainers[id] end)
+        end
         if UlRemedy and type(UlRemedy.Register) == "function" then
             pcall(UlRemedy.Register, {
                 id = "UlSourceNearby",

@@ -164,6 +164,8 @@ local function PrintHelp()
     print("  /us trainer: the nearest class trainer from where you stand")
     print("  /us reagents: the nearest vendor with your class reagents (hunters: ammo for your weapon)")
     print("  /us nearby: a small window with both, refreshed as you move (also in the Ul minimap menu)")
+    print("  /us nearbyreset: forget the trainers and vendors learned from visits (the shipped table stays)")
+    print("  /us nearbyforget: forget what was learned about the targeted NPC")
     print("  /us toggle: recording and tooltip lines on or off")
     print("  /us lines <1-10>: sources per tooltip (now " .. tostring(st.lines) .. ")")
     print("  /us ids: show NPC and object IDs next to known names (now " .. OnOff(st.showIDs) .. ")")
@@ -223,6 +225,17 @@ SlashCmdList["ULSOURCE"] = function(msg)
         if not ok then UlSource.Say("trainer: " .. tostring(err)) end
     elseif cmd == "nearby" then
         if UlSource.ToggleNearbyWindow then UlSource.ToggleNearbyWindow() end
+    elseif cmd == "nearbyforget" then
+        local parsed = UlSource.ParseGUID(UnitGUID and UnitGUID("target"))
+        if not parsed.id then
+            UlSource.Say("target the NPC first.")
+        else
+            local n = UlSource.Store.ForgetNearbyWhere(function(id) return id == parsed.id end)
+            UlSource.Say(n > 0 and ("forgot what was learned about NPC " .. parsed.id .. ".") or ("nothing learned about NPC " .. parsed.id .. "."))
+        end
+    elseif cmd == "nearbyreset" then
+        local n = UlSource.Store.ClearNearby()
+        UlSource.Say("forgot " .. n .. " visited trainer(s) and vendor(s); the shipped positions remain.")
     elseif cmd == "reagents" or cmd == "ammo" or cmd == "vendor" then
         local ok, err = pcall(UlSource.NearestReagentVendor)
         if not ok then UlSource.Say("reagents: " .. tostring(err)) end

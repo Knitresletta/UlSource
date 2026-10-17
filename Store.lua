@@ -194,6 +194,24 @@ function Store.NearbyEntries()
     return db and db.nearby or {}
 end
 
+-- Drop learned entries the predicate accepts; returns how many.
+function Store.ForgetNearbyWhere(pred)
+    if not db then return 0 end
+    local n = 0
+    for id, e in pairs(db.nearby) do
+        if pred(id, e) then db.nearby[id] = nil; n = n + 1 end
+    end
+    return n
+end
+
+function Store.ClearNearby()
+    if not db then return 0 end
+    local n = 0
+    for _ in pairs(db.nearby) do n = n + 1 end
+    wipe(db.nearby)
+    return n
+end
+
 function Store.ClearItem(itemID)
     if not db or not db.items[itemID] then return false end
     db.items[itemID] = nil
