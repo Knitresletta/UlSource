@@ -364,6 +364,9 @@ local function CreateWindow()
     f.stats:SetTextColor(0.6, 0.6, 0.6)
 
     f:SetScript("OnShow", RefreshWindow)
+    -- A new frame is shown by default; hidden here so the first toggle
+    -- shows it instead of hiding it (0.5.3).
+    f:Hide()
     return f
 end
 

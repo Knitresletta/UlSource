@@ -4,7 +4,7 @@ Where did this come from? An addon for **World of Warcraft: Forever** that recor
 
 A separate addon from [UlRemedyForever](https://github.com/Knitresletta/UlRemedyForever). Same author, same style, no shared code. UlRemedyForever is a set of small fixes that remember nothing; UlSource is a database that grows every time you loot.
 
-> **Status:** 0.5.2: records loot, shows sources in tooltips, browser window with a seat in the Ul minimap menu, icons on the zone map where objects were looted. Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever beta (build 1.60.1, interface `16001`).
+> **Status:** 0.5.3: records loot, shows sources in tooltips, browser window with a seat in the Ul minimap menu, icons on the zone map where objects were looted. Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever beta (build 1.60.1, interface `16001`).
 
 ## Why
 
