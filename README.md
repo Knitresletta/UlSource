@@ -4,7 +4,7 @@ Where did this come from? An addon for **World of Warcraft: Forever** that recor
 
 A separate addon from [UlRemedyForever](https://github.com/Knitresletta/UlRemedyForever). Same author, same style, no shared code. UlRemedyForever is a set of small fixes that remember nothing; UlSource is a database that grows every time you loot.
 
-> **Status:** 0.5.0: records loot, shows sources in tooltips, browser window with a seat in the Ul minimap menu, icons on the zone map where objects were looted. Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever beta (build 1.60.1, interface `16001`).
+> **Status:** 0.5.2: records loot, shows sources in tooltips, browser window with a seat in the Ul minimap menu, icons on the zone map where objects were looted. Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever beta (build 1.60.1, interface `16001`).
 
 ## Why
 
@@ -148,12 +148,16 @@ Wowhead's Forever database has the new creatures and rares; pulling those into t
 
 ### Tooltip
 
-Under the item's own lines, at most three sources, best first (most windows the item appeared in):
+Under the item's own lines, at most three sources, best first (most windows the item appeared in). Two lines per source, so the tooltip stays as narrow as the item's own lines: name and rate, then in grey the zone with the newest point and how long ago.
 
 ```
-Source: Briarthorn node, 5 of 5, The Barrens 46,85 (2 h ago)
-        Razorfen Quilguard, 1 of 12, Razorfen Kraul
-        NPC 4523, 1 of 9, Razorfen Kraul
+Source: Briarthorn  100% (5/5)
+        The Barrens 46,85, 2h ago
+        Razorfen Quilguard  8% (1/12)
+        Razorfen Kraul 42,61, 3h ago
+        NPC 4523  11% (1/9)
+        Razorfen Kraul, 1d ago
+        +2 more (/us 2589)
 ```
 
 Same hook as UlRemedyForever: `TooltipDataProcessor.AddTooltipPostCall` for `Enum.TooltipDataType.Item`, `AddLine` only, no money frames or layout calls inside the tooltip.
