@@ -1,7 +1,7 @@
 -- Tooltip: the "Source:" lines under an item, read from the store.
 --
--- At most settings.lines sources, the one the item appeared in most often
--- first. Two lines per source so the tooltip stays as narrow as the item's
+-- At most settings.lines sources, the highest drop rate first (weighed
+-- by how many windows it rests on, see Store.ItemSources). Two lines per source so the tooltip stays as narrow as the item's
 -- own lines: the source's name (or "NPC 4436" until a name is known) with
 -- the rate, "25% (3/12)" windows, then in grey the zone it was seen most
 -- in with the newest point there and how long ago.

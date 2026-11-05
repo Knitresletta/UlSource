@@ -150,7 +150,7 @@ Wowhead's Forever database has the new creatures and rares; pulling those into t
 
 ### Tooltip
 
-Under the item's own lines, at most three sources, best first (most windows the item appeared in). Two lines per source, so the tooltip stays as narrow as the item's own lines: name and rate, then in grey the zone with the newest point and how long ago.
+Under the item's own lines, at most three sources, highest drop rate first. The rate is weighed by how many windows it rests on (the lower end of a Wilson interval), so one lucky window (1/1) does not outrank a source seen a hundred times with the item in thirty; the same order is used in the window and by `/us <id>`. Two lines per source, so the tooltip stays as narrow as the item's own lines: name and rate, then in grey the zone with the newest point and how long ago.
 
 ```
 Source: Briarthorn  100% (5/5)

@@ -264,7 +264,25 @@ local function BestZone(s)
     return bestName, pt and pt[1], pt and pt[2]
 end
 
--- Sorted list of what is known about an item, best source first:
+-- How sure the drop rate n/windows is: the lower end of a 95% Wilson
+-- interval. A plain rate would put a source seen once with the item once
+-- (1/1, "100%") above one seen a hundred times with the item in thirty
+-- (30/100). Weighed by how little is known, 1/1 scores 0.21, 30/100
+-- scores 0.22 and 3/3 scores 0.44, so a well-sampled rate wins over a
+-- lucky first window but a run of hits still climbs fast.
+local function RateScore(n, windows)
+    if not windows or windows <= 0 then return 0 end
+    local z = 1.96
+    local p = n / windows
+    local denom = 1 + z * z / windows
+    local centre = p + z * z / (2 * windows)
+    local spread = z * math.sqrt((p * (1 - p) + z * z / (4 * windows)) / windows)
+    return (centre - spread) / denom
+end
+
+-- Sorted list of what is known about an item, best source first: the
+-- highest drop rate (see RateScore), then the plain rate, then the most
+-- windows, then the newest sighting.
 -- { key, kind, id, name, n, qty, windows, last, zone, x, y }
 function Store.ItemSources(itemID)
     local item = db and db.items[itemID]
@@ -281,7 +299,13 @@ function Store.ItemSources(itemID)
             zone = zone, x = x, y = y,
         }
     end
+    for _, src in ipairs(list) do
+        src.score = RateScore(src.n, src.windows)
+        src.rate = src.windows > 0 and src.n / src.windows or 0
+    end
     table.sort(list, function(a, b)
+        if a.score ~= b.score then return a.score > b.score end
+        if a.rate ~= b.rate then return a.rate > b.rate end
         if a.n ~= b.n then return a.n > b.n end
         return (a.last or 0) > (b.last or 0)
     end)
