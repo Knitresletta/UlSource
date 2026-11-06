@@ -7,8 +7,9 @@
 --                    time, and per zone a count and a few recent points.
 --   db.items[id]     one entry per item: its name and, per source key,
 --                    how many windows it appeared in and the total amount.
---   db.names.c/.o    names learned in play, by NPC or object ID. They win
---                    over the shipped NameData.lua table.
+--   db.names.c/.o    names learned in play, by NPC or object ID. The only
+--                    names there are (no shipped table since 0.8.0: Forever
+--                    sources only, and no Forever source has NPC names).
 --   db.nearby[npcID] class trainers and reagent vendors visited, with the
 --                    position seen. They win over NearbyData.lua.
 --
@@ -94,6 +95,7 @@ function Store.RecordWindow(sources, ctx)
         end
         s.windows = s.windows + 1
         s.last = now
+        if src.fishing then s.fishing = true end
         if src.name then Store.LearnName(src.kind, src.id, src.name) end
 
         if ctx.zone then
@@ -173,8 +175,6 @@ function Store.LearnName(kind, id, name)
     if not db or not id or not name or name == "" then return false end
     local bucket = (kind == "o") and db.names.o or db.names.c
     if bucket[id] == name then return false end
-    local shipped = (kind == "o") and UlSource.ObjectNames or UlSource.NPCNames
-    if shipped and shipped[id] == name then return false end   -- the table has it already
     bucket[id] = name
     return true
 end
@@ -237,9 +237,7 @@ function Store.SourceName(key)
     local kind, id = Store.ParseKey(key)
     if not kind then return nil end
     local bucket = (kind == "o") and db.names.o or db.names.c
-    if bucket[id] then return bucket[id] end
-    local shipped = (kind == "o") and UlSource.ObjectNames or UlSource.NPCNames
-    return shipped and shipped[id] or nil
+    return bucket[id]
 end
 
 -- Does this creature need a name? Used by the learner to stay cheap.
@@ -247,8 +245,6 @@ function Store.WantsName(kind, id)
     if not db then return false end
     local bucket = (kind == "o") and db.names.o or db.names.c
     if bucket[id] then return false end
-    local shipped = (kind == "o") and UlSource.ObjectNames or UlSource.NPCNames
-    if shipped and shipped[id] then return false end
     if kind == "o" then return db.sources[Store.Key("o", id)] ~= nil end
     return db.sources[Store.Key("c", id)] ~= nil or db.sources[Store.Key("s", id)] ~= nil
 end
@@ -284,6 +280,9 @@ end
 -- highest drop rate (see RateScore), then the plain rate, then the most
 -- windows, then the newest sighting.
 -- { key, kind, id, name, n, qty, windows, last, zone, x, y }
+-- Only sources with a name: a drop source whose creature has no name yet
+-- is not worth showing (Jonatan, 07.11.2026). It keeps counting, and
+-- shows up the moment the name is learned.
 function Store.ItemSources(itemID)
     local item = db and db.items[itemID]
     if not item then return nil end
@@ -291,13 +290,16 @@ function Store.ItemSources(itemID)
     for key, p in pairs(item.sources) do
         local s = db.sources[key]
         local kind, id = Store.ParseKey(key)
+        local name = Store.SourceName(key)
         local zone, x, y
         if s then zone, x, y = BestZone(s) end
-        list[#list + 1] = {
-            key = key, kind = kind, id = id, name = Store.SourceName(key),
-            n = p.n, qty = p.qty, windows = s and s.windows or p.n, last = p.last,
-            zone = zone, x = x, y = y,
-        }
+        if name then
+            list[#list + 1] = {
+                key = key, kind = kind, id = id, name = name,
+                n = p.n, qty = p.qty, windows = s and s.windows or p.n, last = p.last,
+                zone = zone, x = x, y = y,
+            }
+        end
     end
     for _, src in ipairs(list) do
         src.score = RateScore(src.n, src.windows)
@@ -336,7 +338,7 @@ function Store.ResolveMapIDs()
 end
 
 -- Every point of every object source taken on this map:
--- { x, y, key, itemID }, newest first within a source.
+-- { x, y, key, itemID, fishing }, newest first within a source.
 function Store.PinsForMap(mapID)
     local list = {}
     if not db or not mapID then return list end
@@ -346,7 +348,7 @@ function Store.PinsForMap(mapID)
             for _, z in pairs(s.zones or {}) do
                 if z.mapID == mapID then
                     for _, pt in ipairs(z.points or {}) do
-                        list[#list + 1] = { x = pt[1], y = pt[2], key = key, itemID = s.lastItem }
+                        list[#list + 1] = { x = pt[1], y = pt[2], key = key, itemID = s.lastItem, fishing = s.fishing }
                     end
                 end
             end

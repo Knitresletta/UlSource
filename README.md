@@ -4,7 +4,7 @@ Where did this come from? An addon for **World of Warcraft: Forever** that recor
 
 A separate addon from [UlRemedyForever](https://github.com/Knitresletta/UlRemedyForever). Same author, same style, no shared code. UlRemedyForever is a set of small fixes that remember nothing; UlSource is a database that grows every time you loot.
 
-> **Status:** 0.7.0: records loot, shows sources in tooltips, browser window with a seat in the Ul minimap menu, icons on the zone map where objects were looted, `/us trainer`, `/us reagents`, the nearby window and trainer and vendor pins on the map (positions from 1.12 data; chat and window confirmed in play 17.10.2026, pins not yet). Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever beta (build 1.60.1, interface `16001`).
+> **Status:** 0.8.0: records loot, shows sources in tooltips (only sources whose name has been seen), browser window with a seat in the Ul minimap menu, icons on the zone map where objects were looted, `/us trainer`, `/us reagents`, the nearby window and trainer and vendor pins on the map. Forever sources only since 0.8.0: the shipped name table is gone, every name is learned in play. Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever (build 1.60.1, interface `16001`).
 
 ## Why
 
@@ -21,7 +21,7 @@ Forever has no trustworthy drop database. Wowhead and the old Classic databases 
 - Point you to the nearest class trainer and the nearest vendor with your class reagents (hunters: ammo for the equipped weapon) from where you stand, with `/us trainer` and `/us reagents`.
 
 **It deliberately does not:**
-- Ship any pre-made drop data. Everything in the database comes from this account's own looting. The two shipped tables are static server data, not drop data: NPC and object names (`NameData.lua`) and the positions of class trainers and reagent vendors (`NearbyData.lua`), both from the vanilla 1.12 database and both overridden by what is seen in play.
+- Ship any pre-made drop data, or any vanilla data at all. Everything in the database comes from this account's own looting, the names it has seen and the trainers and vendors it has visited. The one shipped table, `NearbyData.lua`, says which items are class reagents and ammo, from the Forever client's own data; no positions are shipped.
 - Share data with other players. Addon messages over a chat channel (the mechanism UlRemedyForever uses for auction prices) would be the way if that ever becomes wanted. That is a separate decision, a separate version and a separate section in this README, with the same "what leaves your machine" honesty as UlRemedyForever.
 - Change how looting works. No auto-loot, no filtering, no selling. It watches and writes down.
 - Track quest rewards, vendor purchases, mail or trades. Only loot windows. The one thing read from a vendor is whether it sells class reagents or ammo, for `/us reagents`; what you buy is not recorded.
@@ -32,10 +32,9 @@ Forever has no trustworthy drop database. Wowhead and the old Classic databases 
 |---|---|---|---|
 | Collector (`Collector.lua`) | Reads every slot and its source when a loot window is ready, one record per window | `LOOT_READY`, `GetLootSourceInfo`, `GetLootSlotInfo`, `GetLootSlotLink`, `C_Map.GetPlayerMapPosition`, `UNIT_SPELLCAST_SUCCEEDED` for the Skinning cast | Nothing directly, hands records to Store |
 | Store (`Store.lua`) | The database: sources with window counts and points, items with per-source counts, learned names. The only module that writes to it | SavedVariables `UlSourceDB` | SavedVariables only |
-| Name table (`NameData.lua`) | NPC and object names shipped with the addon, built by `tools/build_names.py` | The vmangos 1.12 world database at build time | Nothing |
-| Name learner (`Names.lua`) | Fills in creature names the table does not have | `PLAYER_TARGET_CHANGED`, `UPDATE_MOUSEOVER_UNIT`, `UnitGUID`, `UnitName` outside instances | Names in Store |
+| Name learner (`Names.lua`) | The only source of creature names: learns them from the target and the mouseover unit | `PLAYER_TARGET_CHANGED`, `UPDATE_MOUSEOVER_UNIT`, `UnitGUID`, `UnitName` outside instances | Names in Store |
 | Tooltip (`Tooltip.lua`) | Adds the Source lines to the item tooltip | `TooltipDataProcessor` (Forever runs the retail 12.x tooltip code), `AddLine` only | Nothing |
-| Nearby (`Nearby.lua`, `NearbyData.lua`) | `/us trainer`, `/us reagents`; learns visited trainers and reagent vendors | `C_Map` world positions, `TRAINER_SHOW`, `MERCHANT_SHOW`, merchant item links | `UlSourceDB.nearby` via the store |
+| Nearby (`Nearby.lua`, `NearbyData.lua`) | `/us trainer`, `/us reagents`; learns visited class trainers and reagent vendors, nothing shipped but the reagent and ammo item lists (from the Forever client's data via `tools/build_nearby.py`) | `C_Map` world positions, `TRAINER_SHOW`, `MERCHANT_SHOW`, merchant item links, the NPC's tooltip title | `UlSourceDB.nearby` via the store |
 | Map pins (`MapPins.lua`, `MapPins.xml`) | A round 8 px item icon on the zone map at every point an object was looted. No mouse input | Store, `WorldMapFrame:AddDataProvider` | Nothing |
 | Window (`Window.lua`) | The browser: searchable item list, the selected item's sources, settings, forget buttons. Registers in UlRemedyForever's minimap menu when that addon is there | Store, `UlRemedy.Register` if it exists | Settings |
 | Core (`Core.lua`) | Settings, `/us` commands, Lua error log | `UlSourceDB.settings`, `ScriptErrorsFrame.errorData` | Settings, `UlSourceDB.errors` |
@@ -138,15 +137,13 @@ What the data cannot see, said once: corpses looted by other group members, and 
 
 ### Names
 
-The loot source is a GUID; the name of the creature is not in it, and inside instances the target's name and GUID are secret values. Names come from three places, in this order:
+The loot source is a GUID; the name of the creature is not in it, and inside instances the target's name and GUID are secret values. There is no shipped name table: names are server data, no Forever source has them, and vanilla tables are not used (since 0.8.0). Names come from play, in this order:
 
-1. **A shipped table**, `NameData.lua`: NPC ID to name for 10,381 creatures and object ID to name for 743 chests, nodes and fishing pools, generated by `tools/build_names.py` from the vmangos world database (vanilla 1.12). Names are server data and not in the client files, so a server database is the only offline source. Forever keeps the 1.12 IDs for everything old (checked against the probe: 4436 Razorfen Quilguard, 1621 Briarthorn, 19861 Henrig Lonebrow's Journal). Forever-new creatures and objects are not in it.
-2. **The target at loot time**, outside instances: when the target's GUID is readable and equals the source GUID, its name is stored on the source.
-3. **Two cheap learners afterwards:** on `PLAYER_TARGET_CHANGED` and `UPDATE_MOUSEOVER_UNIT`, when `UnitGUID` is readable and points to a creature whose `c:` or `s:` entry has no name yet, the name is written. Game objects have no unit, so a Forever-new node is named after the first item it gave ("Briarthorn") until a better source exists.
+1. **The target at loot time**, outside instances: when the target's GUID is readable and equals the source GUID, its name is stored on the source.
+2. **Two cheap learners afterwards:** on `PLAYER_TARGET_CHANGED` and `UPDATE_MOUSEOVER_UNIT`, when `UnitGUID` is readable and points to a creature whose `c:` or `s:` entry has no name yet, the name is written.
+3. **Objects** have no unit. A node is named after the herb or ore it gave ("Briarthorn"), a pool looted right after a Fishing cast is "Fishing pool", and a chest stays nameless.
 
-Learned names are stored in `UlSourceDB.names` and win over the shipped table, so a renamed creature shows its Forever name once seen; a name the table already has is not stored again. The tooltip shows `Razorfen Quilguard` when the name is known and `NPC 4436` until then, never a guess.
-
-Wowhead's Forever database has the new creatures and rares; pulling those into the table is a later tool, not part of 0.2.0.
+Learned names are stored in `UlSourceDB.names`. A source without a name is counted but not shown, in tooltips, the window or `/us <id>`: a drop source nobody can name is no help (decided 07.11.2026). It appears the moment the name is learned.
 
 ### Tooltip
 
@@ -227,9 +224,9 @@ UlSource: nearest reagent vendor: Hagrus, Orgrimmar 39,37, 53 yd north-east (sel
 
 `/us nearby`, or the "UlSource: nearby" row in the Ul minimap button's menu, opens a small window with the same two answers, refreshed every 3 seconds while it is open so the distance and direction follow you. Escape closes it, it can be dragged.
 
-Positions are world coordinates from `NearbyData.lua`, built by `tools/build_nearby.py` from the vmangos 1.12 database: 254 class trainers and 176 vendors, one row per spawn point, with faction. The player's own world position comes from `C_Map.GetWorldPosFromMapPos`, and the point is projected back onto the continent map to name the zone. Inside instances the map ID is secret and the command says so.
+No positions are shipped (Forever sources only, and no Forever source has NPC positions). Opening a class trainer window, or a merchant window that has a reagent or ammo in it, stores that NPC with the player's position in `UlSourceDB.nearby`, and the commands answer from those visits: a fresh account is told "no druid trainer visited on this continent yet" until it has been to one. An entry remembers which player factions have opened its window, and is offered to those; the database is account-wide, so a neutral vendor used by both sides serves both. What counts as a reagent or ammo is `NearbyData.lua`, built by `tools/build_nearby.py` from the Forever client's own tables on wago.tools (the items the class spells consume that a vendor sells, and every arrow and bullet with its item level). The player's own world position comes from `C_Map.GetWorldPosFromMapPos`, and a point is projected back onto the continent map to name the zone. Inside instances the map ID is secret and the command says so.
 
-Forever may have moved, removed or added NPCs, and the 1.12 positions are not verified against Forever in play. The correction is learning: opening a class trainer window, or a merchant window that has a reagent or ammo in it, stores that NPC with the player's position in `UlSourceDB.nearby`, and a learned entry wins over the shipped rows for the same NPC. Its faction is the shipped table's, not the visiting character's, so a neutral vendor stays neutral, and the entry also remembers which player factions have opened its window: an NPC unknown to the table is offered to the factions that have actually used it. The database is account-wide, so this matters with characters on both sides. Trainers that are not class trainers are never learned as one: the game's own tradeskill flag (`IsTradeskillTrainer`) plus a shipped list of every 1.12 NPC that opens a trainer window without being a class trainer (trainer types mounts, weapon masters and professions, pets, and anything else carrying the trainer flag), 338 IDs. A Forever-new trainer of another kind can still slip through; `/us nearbyforget` with it targeted removes it. Entries 0.6.0 and 0.6.1 learned wrongly from a weapon master are dropped at login. `/us nearbyreset` forgets all learned entries and keeps the table. Nothing else about a vendor is read or kept.
+A trainer window counts as a class trainer for this character when the NPC's own tooltip title ("Druid Trainer") holds the character's class name, so weapon masters, riding trainers and pet trainers are never learned as one.
 
 ### Map pins
 

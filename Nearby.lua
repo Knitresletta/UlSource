@@ -3,13 +3,18 @@
 -- stands, the nearest class trainer, and the nearest vendor that sells
 -- this class's spell reagents (hunters: ammo for the equipped weapon).
 --
--- Positions come from NearbyData.lua (vmangos 1.12, built by
--- tools/build_nearby.py) in world coordinates, and from NPCs this account
--- has visited: a trainer window or a merchant window with a reagent or
--- ammo in it stores the NPC under UlSourceDB.nearby with the player's
--- position at that moment. A learned entry wins over the shipped rows for
--- the same NPC, so an NPC Forever has moved is right after one visit, and
--- a Forever-new one exists after one visit.
+-- Positions come from NPCs this account has visited, nothing else: a
+-- class trainer window, or a merchant window with a reagent or ammo in
+-- it, stores the NPC under UlSourceDB.nearby with the player's position
+-- at that moment. No positions are shipped (Forever sources only, and
+-- none has NPC positions), so a fresh account knows nobody until it has
+-- been to them. What counts as a reagent or ammo is NearbyData.lua, built
+-- from the Forever client's own data (tools/build_nearby.py, wago).
+--
+-- Whether a trainer window belongs to a class trainer is read from the
+-- NPC's own tooltip title ("Druid Trainer"): it is a class trainer for
+-- this character when the title holds the character's class name, so
+-- weapon masters, riding and pet trainers are never learned as one.
 --
 -- The player's world position is C_Map.GetWorldPosFromMapPos of the map
 -- position, the same API UlRemedyForever's flight paths rely on. Inside
@@ -141,37 +146,23 @@ local function Describe(hit, px, py, continentID, playerMapID)
 end
 
 ------------------------------------------------------------------------
--- Candidates: shipped rows plus learned entries, learned wins per NPC
+-- Candidates: the learned entries this character can use
 ------------------------------------------------------------------------
 
-local function Allowed(faction, mine)
-    return faction == "N" or faction == nil or faction == mine
-end
-
--- A learned entry is usable by a faction the shipped table allows, or by
--- any faction that has actually opened its window (seenBy), so a neutral
--- vendor visited by a Horde character stays visible to Alliance ones.
+-- A learned entry is usable by any faction that has actually opened its
+-- window (seenBy), so a neutral vendor visited by a Horde character is
+-- offered to Alliance ones only once one of them has used it too.
 local function LearnedAllowed(e, mine)
-    if e.faction and Allowed(e.faction, mine) then return true end
     return e.seenBy ~= nil and e.seenBy[mine] == true
 end
 
--- Every usable candidate for this character: shipped rows the player's
--- faction may use, replaced per NPC by a learned entry when one exists.
--- `shipped` is a list of rows, `pick(row)` returns id, name, faction,
--- continent, x, y, items or nil to skip it. `learnedKind` selects db.nearby
--- entries ("t" or "v") and `accept(entry)` says whether a learned entry
--- fits. Each candidate: { id, name, continent, x, y, learned, items }.
-local function Candidates(shipped, pick, learnedKind, accept)
+-- Every usable candidate for this character. `learnedKind` selects
+-- db.nearby entries ("t" or "v") and `accept(entry)` says whether an
+-- entry fits. Each candidate: { id, name, continent, x, y, learned, items }.
+local function Candidates(learnedKind, accept)
     local mine = PlayerFaction()
     local learned = Store.NearbyEntries and Store.NearbyEntries() or {}
     local list = {}
-    for _, row in ipairs(shipped) do
-        local id, name, faction, cont, x, y, items = pick(row)
-        if id and Allowed(faction, mine) and not learned[id] then
-            list[#list + 1] = { id = id, name = name, continent = cont, x = x, y = y, learned = false, items = items }
-        end
-    end
     for id, e in pairs(learned) do
         if e.kind == learnedKind and LearnedAllowed(e, mine) and accept(e) then
             list[#list + 1] = { id = id, name = e.name or ("NPC " .. id), continent = e.continent, x = e.x, y = e.y,
@@ -182,9 +173,9 @@ local function Candidates(shipped, pick, learnedKind, accept)
 end
 
 -- The nearest candidate on the player's continent, or nil.
-local function Nearest(shipped, pick, learnedKind, accept, continentID, px, py)
+local function Nearest(learnedKind, accept, continentID, px, py)
     local best, bestD
-    for _, c in ipairs(Candidates(shipped, pick, learnedKind, accept)) do
+    for _, c in ipairs(Candidates(learnedKind, accept)) do
         if c.continent == continentID then
             local dx, dy = c.x - px, c.y - py
             local d = dx * dx + dy * dy
@@ -224,7 +215,8 @@ local function WantedItems(class)
     else
         local names = {}
         for id, r in pairs(D.reagents) do
-            if r[1] == class then wanted[id] = true; names[#names + 1] = r[2] end
+            -- r[1] holds every class token that uses the item, space separated.
+            if r[1]:find(class, 1, true) then wanted[id] = true; names[#names + 1] = r[2] end
         end
         table.sort(names)
         label = #names > 0 and table.concat(names, ", ") or nil
@@ -256,18 +248,15 @@ end
 local NOT_HERE = "position not readable here (instance or loading screen)"
 
 -- Text for the nearest class trainer, or nil and a reason.
-local function TrainerPickers(class)
-    return function(r) if r[3] == class then return r[1], r[2], r[4], r[5], r[6], r[7] end end,
-           function(e) return e.class == class end
+local function TrainerAccept(class)
+    return function(e) return e.class == class end
 end
 
-local function VendorPickers(wanted)
-    local function sells(items)
-        for _, id in ipairs(items or {}) do if wanted[id] then return true end end
+local function VendorAccept(wanted)
+    return function(e)
+        for _, id in ipairs(e.items or {}) do if wanted[id] then return true end end
         return false
     end
-    return function(r) if sells(r[7]) then return r[1], r[2], r[3], r[4], r[5], r[6], r[7] end end,
-           function(e) return sells(e.items) end
 end
 
 function UlSource.NearbyTrainerText()
@@ -275,10 +264,9 @@ function UlSource.NearbyTrainerText()
     if not class or not Data() then return nil, "no class data" end
     local continentID, px, py, mapID = PlayerWorld()
     if not continentID then return nil, NOT_HERE end
-    local pick, accept = TrainerPickers(class)
-    local hit = Nearest(Data().trainers, pick, "t", accept, continentID, px, py)
+    local hit = Nearest("t", TrainerAccept(class), continentID, px, py)
     local who = (CLASS_NAMES[class] or class:lower()) .. " trainer"
-    if not hit then return nil, "no " .. who .. " known on this continent" end
+    if not hit then return nil, "no " .. who .. " visited on this continent yet" end
     return Describe(hit, px, py, continentID, mapID), who
 end
 
@@ -292,11 +280,10 @@ function UlSource.NearbyReagentsText()
     end
     local continentID, px, py, mapID = PlayerWorld()
     if not continentID then return nil, NOT_HERE end
-    local pick, accept = VendorPickers(wanted)
-    local hit = Nearest(Data().vendors, pick, "v", accept, continentID, px, py)
+    local hit = Nearest("v", VendorAccept(wanted), continentID, px, py)
     local who = class == "HUNTER" and (label .. " vendor") or "reagent vendor"
     if not hit then
-        return nil, "no " .. who .. " known on this continent" .. (class ~= "HUNTER" and label and (" (" .. label .. ")") or "")
+        return nil, "no " .. who .. " visited on this continent yet" .. (class ~= "HUNTER" and label and (" (" .. label .. ")") or "")
     end
     local best = hit.items and BestWanted(hit.items, wanted)
     local text = Describe(hit, px, py, continentID, mapID)
@@ -322,15 +309,13 @@ function UlSource.NearbyPoints()
     if not class or not Data() then return {} end
     local list = {}
     local who = (CLASS_NAMES[class] or class:lower()) .. " trainer"
-    local pick, accept = TrainerPickers(class)
-    for _, c in ipairs(Candidates(Data().trainers, pick, "t", accept)) do
+    for _, c in ipairs(Candidates("t", TrainerAccept(class))) do
         c.kind, c.detail = "t", who
         list[#list + 1] = c
     end
     local wanted = WantedItems(class)
     if next(wanted) then
-        pick, accept = VendorPickers(wanted)
-        for _, c in ipairs(Candidates(Data().vendors, pick, "v", accept)) do
+        for _, c in ipairs(Candidates("v", VendorAccept(wanted))) do
             local best = c.items and BestWanted(c.items, wanted)
             c.kind, c.detail = "v", best and ("sells " .. best) or "vendor"
             c.ammo = class == "HUNTER"
@@ -447,18 +432,38 @@ local function NPC()
     return parsed.id, name
 end
 
--- The faction the shipped table gives an NPC ("A", "H", "N"), or nil
--- when the NPC is not in it.
-local function ShippedFaction(id)
-    local D = Data()
-    for _, r in ipairs(D.trainers) do if r[1] == id then return r[4] end end
-    for _, r in ipairs(D.vendors) do if r[1] == id then return r[3] end end
-    return nil
+-- Whether the trainer window open now is a class trainer for this
+-- character: the NPC's tooltip title ("Druid Trainer", "Weapon Master",
+-- "Riding Trainer") holds the character's localized class name. Read
+-- from a scanning tooltip of our own; nil when the title is not readable.
+local scan
+local function IsClassTrainerForMe()
+    if not UnitExists or not UnitExists("npc") then return nil end
+    if not scan then
+        scan = CreateFrame("GameTooltip", "UlSourceScanTooltip", UIParent, "GameTooltipTemplate")
+        scan:SetOwner(UIParent, "ANCHOR_NONE")
+    end
+    local ok = pcall(function()
+        scan:ClearLines()
+        scan:SetOwner(UIParent, "ANCHOR_NONE")
+        scan:SetUnit("npc")
+    end)
+    if not ok then return nil end
+    local className = Plain(UnitClass("player"))
+    if type(className) ~= "string" then return nil end
+    for i = 2, math.min(3, scan:NumLines()) do
+        local fs = _G["UlSourceScanTooltipTextLeft" .. i]
+        local text = fs and Plain(fs:GetText())
+        if type(text) == "string" and text ~= "<secret>" then
+            if text:find(className, 1, true) then return true end
+        end
+    end
+    return false
 end
 
--- The record for a visit: position now, the NPC's faction from the shipped
--- table (not the player's, a neutral vendor must stay neutral), and the
--- set of player factions that have opened its window.
+-- The record for a visit: position now and the set of player factions
+-- that have opened its window (no shipped faction: an NPC is offered to
+-- the factions that have actually used it).
 local function Here(id)
     local continentID, x, y = PlayerWorld()
     if not continentID then return nil end
@@ -467,7 +472,7 @@ local function Here(id)
     local mine = PlayerFaction()
     if mine then seenBy[mine] = true end
     return { continent = continentID, x = math.floor(x * 10 + 0.5) / 10, y = math.floor(y * 10 + 0.5) / 10,
-             faction = ShippedFaction(id), seenBy = seenBy }
+             seenBy = seenBy }
 end
 
 local function OnTrainerShow()
@@ -476,7 +481,7 @@ local function OnTrainerShow()
     local n = GetNumTrainerServices and tonumber(Plain(GetNumTrainerServices())) or 0
     if n == 0 then return end
     local id, name = NPC()
-    if not id or Data().notClassTrainers[id] then return end
+    if not id or not IsClassTrainerForMe() then return end
     local rec = Here(id)
     if not rec then return end
     rec.kind, rec.class, rec.name = "t", PlayerClass(), name
@@ -512,11 +517,6 @@ frame:RegisterEvent("MERCHANT_SHOW")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:SetScript("OnEvent", function(self, event)
     if event == "PLAYER_LOGIN" then
-        -- 0.6.0 and 0.6.1 learned weapon masters and riding trainers as
-        -- class trainers; drop such entries once the table knows better.
-        if Data() and Store.ForgetNearbyWhere then
-            pcall(Store.ForgetNearbyWhere, function(id, e) return e.kind == "t" and Data().notClassTrainers[id] end)
-        end
         if UlRemedy and type(UlRemedy.Register) == "function" then
             pcall(UlRemedy.Register, {
                 id = "UlSourceNearby",

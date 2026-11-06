@@ -2,7 +2,7 @@
 --
 -- At most settings.lines sources, the highest drop rate first (weighed
 -- by how many windows it rests on, see Store.ItemSources). Two lines per source so the tooltip stays as narrow as the item's
--- own lines: the source's name (or "NPC 4436" until a name is known) with
+-- own lines: the source's name (a source without a name is not listed) with
 -- the rate, "25% (3/12)" windows, then in grey the zone it was seen most
 -- in with the newest point there and how long ago.
 --
@@ -25,7 +25,8 @@ local function Ago(t)
     return math.floor(d / 86400 + 0.5) .. "d ago"
 end
 
--- "Razorfen Quilguard", "Briarthorn", "Agam'ar (skinning)", "NPC 4436".
+-- "Razorfen Quilguard", "Briarthorn", "Agam'ar (skinning)"; "NPC 4436"
+-- only for a source handed in without a name (the store lists none).
 function UlSource.SourceLabel(src)
     local name = src.name
     if not name then

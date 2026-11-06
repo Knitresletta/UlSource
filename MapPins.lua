@@ -1,5 +1,6 @@
 -- Map Pins: a small icon on the zone map at every point where an object
--- (herb, ore vein, chest, fishing spot) was looted, for the nodes this
+-- (herb, ore vein, chest, fishing spot: a pool looted right after a
+-- Fishing cast, learned in play) was looted, for the nodes this
 -- character can gather (see "Which pins" below), and a larger icon at
 -- every class trainer and reagent vendor this character can use (from
 -- Nearby.lua, see "Nearby pins" below).
@@ -79,9 +80,7 @@ local function RefreshProfessions()
 end
 
 local function NeededProfession(point)
-    if UlSource.FishingObjects and UlSource.FishingObjects[Store.ParseKeyID(point.key)] then
-        return FISHING
-    end
+    if point.fishing then return FISHING end
     if point.itemID and C_Item and C_Item.GetItemInfoInstant then
         local ok, _, _, _, _, _, classID, subclassID = pcall(C_Item.GetItemInfoInstant, point.itemID)
         if ok and classID == CLASS_TRADEGOODS then

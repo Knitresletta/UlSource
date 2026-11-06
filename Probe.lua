@@ -267,9 +267,8 @@ local function Record(source, autoLoot, isFromItem)
         local src = first and first.sources and first.sources[1] and first.sources[1].guid
         local where = "no source GUID"
         if src and src.kind then
-            local names = (src.kind == "GameObject") and UlSource.ObjectNames or UlSource.NPCNames
-            local known = names and src.id and names[src.id]
-            where = src.kind .. " " .. tostring(src.id or "?") .. (known and (" " .. known) or " (not in the name table)")
+            local known = src.id and UlSource.Store.SourceName(UlSource.Store.Key(src.kind == "GameObject" and "o" or "c", src.id))
+            where = src.kind .. " " .. tostring(src.id or "?") .. (known and (" " .. known) or " (no name learned yet)")
         end
         local who = rec.target and rec.target.name and (" (" .. tostring(rec.target.name) .. ")") or ""
         local pos = rec.position or {}

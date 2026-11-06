@@ -1,4 +1,5 @@
--- Name learner: fills in creature names the shipped table does not have.
+-- Name learner: the only place creature names come from. Forever sources
+-- only, and no Forever source has NPC names, so there is no shipped table.
 --
 -- Whenever the target or the mouseover unit changes, and the unit's GUID
 -- and name are readable (outside instances they are; inside they are

@@ -10,6 +10,7 @@
     ".pkgmeta",
     ".gitattributes",
     ".gitignore",
-    "tools/*"
+    "tools/*",
+    "CLAUDE.md"
   ]
 }

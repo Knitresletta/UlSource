@@ -16,17 +16,26 @@
 --
 -- The name of a creature is taken from the current target when its GUID
 -- is readable and equals the source GUID. Inside instances it is secret
--- and stays nil; the shipped table and the name learner cover it.
+-- and stays nil; the name learner (Names.lua) covers it later. There is
+-- no shipped name table (Forever sources only, and none has NPC names).
+-- An object is named after what it gave when that is an herb or ore (the
+-- node is called the same), "Fishing pool" when the window follows a
+-- Fishing cast, and stays nameless otherwise (a chest): nameless sources
+-- are counted but not shown.
 
 local SAME_WINDOW_SECONDS = 1.5
 local SKIN_WINDOW_SECONDS = 2
+local FISH_WINDOW_SECONDS = 3
 local SLOT_ITEM = 1
+local CLASS_TRADEGOODS = 7
+local SUBCLASS_METAL_AND_STONE, SUBCLASS_HERB = 7, 9
 
 local Plain = UlSource.Plain
 local Store = UlSource.Store
 
 local lastSignature, lastWindowAt = nil, 0
 local lastSkinAt = 0
+local lastFishAt = 0
 local lastError
 
 local function Enabled()
@@ -87,6 +96,21 @@ local function KindFor(parsed)
         return "o"
     end
     return nil
+end
+
+-- The name a gathering node goes by: the herb or ore it gave. nil for
+-- anything else (a chest's contents say nothing about the chest).
+local function NodeName(items)
+    if not C_Item or not C_Item.GetItemInfoInstant then return nil end
+    local best
+    for itemID, it in pairs(items) do
+        local ok, _, _, _, _, _, classID, subclassID = pcall(C_Item.GetItemInfoInstant, itemID)
+        if ok and classID == CLASS_TRADEGOODS and (subclassID == SUBCLASS_HERB or subclassID == SUBCLASS_METAL_AND_STONE)
+           and it.name and (not best or itemID < best.id) then
+            best = { id = itemID, name = it.name }
+        end
+    end
+    return best and best.name or nil
 end
 
 -- Returns sources ({ [key] = { kind, id, guid, items } }) and a signature
@@ -158,6 +182,17 @@ local function OnLootReady()
             if src.guid == targetGUID then src.name = targetName end
         end
     end
+    local fishing = GetTime() - lastFishAt <= FISH_WINDOW_SECONDS
+    for _, src in pairs(sources) do
+        if src.kind == "o" then
+            if fishing then
+                src.fishing = true
+                src.name = "Fishing pool"
+            else
+                src.name = NodeName(src.items)
+            end
+        end
+    end
     local x, y, mapID = Position()
     Store.RecordWindow(sources, { zone = Zone(), mapID = mapID, x = x, y = y })
 end
@@ -170,6 +205,7 @@ local function OnSpellcast(unit, _, spellID)
         name = info and Plain(info.name)
     end
     if name == "Skinning" then lastSkinAt = GetTime() end
+    if name == "Fishing" then lastFishAt = GetTime() end
 end
 
 ------------------------------------------------------------------------
