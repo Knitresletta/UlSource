@@ -4,7 +4,7 @@ Where did this come from? An addon for **World of Warcraft: Forever** that recor
 
 A separate addon from [UlRemedyForever](https://github.com/Knitresletta/UlRemedyForever). Same author, same style, no shared code. UlRemedyForever is a set of small fixes that remember nothing; UlSource is a database that grows every time you loot.
 
-> **Status:** 0.8.0: records loot, shows sources in tooltips (only sources whose name has been seen), browser window with a seat in the Ul minimap menu, icons on the zone map where objects were looted, `/us trainer`, `/us reagents`, the nearby window and trainer and vendor pins on the map. Forever sources only since 0.8.0: the shipped name table is gone, every name is learned in play. Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever (build 1.60.1, interface `16001`).
+> **Status:** 0.8.1: records loot, shows sources in tooltips (only sources whose name has been seen), browser window with a seat in the Ul minimap menu, icons on the zone map where objects were looted, `/us trainer`, `/us reagents`, the nearby window and trainer and vendor pins on the map. Forever sources only since 0.8.0: the shipped name table is gone, every name is learned in play. Not verified in play: mining, skinning, fishing (no character has those professions yet). Target client: Forever (build 1.60.1, interface `16001`).
 
 ## Why
 

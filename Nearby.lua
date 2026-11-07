@@ -11,10 +11,13 @@
 -- been to them. What counts as a reagent or ammo is NearbyData.lua, built
 -- from the Forever client's own data (tools/build_nearby.py, wago).
 --
--- Whether a trainer window belongs to a class trainer is read from the
--- NPC's own tooltip title ("Druid Trainer"): it is a class trainer for
--- this character when the title holds the character's class name, so
--- weapon masters, riding and pet trainers are never learned as one.
+-- Whether a trainer window belongs to a class trainer is read from what
+-- it offers: the services are spell names, and the spellbook knows which
+-- names are the class's own (the class tabs, not General). One service
+-- named like a known class spell makes it a class trainer for this
+-- character; weapon masters, riding and pet trainers offer nothing that
+-- sits in a class tab. The NPC's tooltip title ("Druid Trainer") is the
+-- fallback when the spellbook API is not there.
 --
 -- The player's world position is C_Map.GetWorldPosFromMapPos of the map
 -- position, the same API UlRemedyForever's flight paths rely on. Inside
@@ -294,6 +297,7 @@ end
 function UlSource.NearestTrainer()
     local text, who = UlSource.NearbyTrainerText()
     if text then UlSource.Say("nearest " .. who .. ": " .. text .. ".") else UlSource.Say("trainer: " .. who .. ".") end
+    UlSource.Say("last trainer window: " .. lastTrainerCheck)
 end
 
 function UlSource.NearestReagentVendor()
@@ -436,28 +440,116 @@ end
 -- character: the NPC's tooltip title ("Druid Trainer", "Weapon Master",
 -- "Riding Trainer") holds the character's localized class name. Read
 -- from a scanning tooltip of our own; nil when the title is not readable.
+-- Diagnostics for /us trainer: what the last trainer window looked like.
+local lastTrainerCheck = "no trainer window opened yet"
+
+-- The unit tooltip's lines after the name, via the client's tooltip data
+-- (C_TooltipInfo, the retail way, no frame needed), else a scanning
+-- tooltip of our own. Empty when nothing is readable.
 local scan
-local function IsClassTrainerForMe()
-    if not UnitExists or not UnitExists("npc") then return nil end
-    if not scan then
-        scan = CreateFrame("GameTooltip", "UlSourceScanTooltip", UIParent, "GameTooltipTemplate")
-        scan:SetOwner(UIParent, "ANCHOR_NONE")
-    end
-    local ok = pcall(function()
-        scan:ClearLines()
-        scan:SetOwner(UIParent, "ANCHOR_NONE")
-        scan:SetUnit("npc")
-    end)
-    if not ok then return nil end
-    local className = Plain(UnitClass("player"))
-    if type(className) ~= "string" then return nil end
-    for i = 2, math.min(3, scan:NumLines()) do
-        local fs = _G["UlSourceScanTooltipTextLeft" .. i]
-        local text = fs and Plain(fs:GetText())
-        if type(text) == "string" and text ~= "<secret>" then
-            if text:find(className, 1, true) then return true end
+local function NpcTitleLines(unit)
+    local lines = {}
+    if C_TooltipInfo and C_TooltipInfo.GetUnit then
+        local ok, data = pcall(C_TooltipInfo.GetUnit, unit)
+        if ok and type(data) == "table" and type(data.lines) == "table" then
+            for i = 2, math.min(4, #data.lines) do
+                local text = Plain(data.lines[i] and data.lines[i].leftText)
+                if type(text) == "string" and text ~= "<secret>" and text ~= "" then lines[#lines + 1] = text end
+            end
         end
     end
+    if #lines == 0 then
+        if not scan then
+            scan = CreateFrame("GameTooltip", "UlSourceScanTooltip", UIParent, "GameTooltipTemplate")
+        end
+        local ok = pcall(function()
+            scan:SetOwner(UIParent, "ANCHOR_NONE")
+            scan:ClearLines()
+            scan:SetUnit(unit)
+        end)
+        if ok then
+            for i = 2, math.min(4, scan:NumLines()) do
+                local fs = _G["UlSourceScanTooltipTextLeft" .. i]
+                local text = fs and Plain(fs:GetText())
+                if type(text) == "string" and text ~= "<secret>" and text ~= "" then lines[#lines + 1] = text end
+            end
+        end
+    end
+    return lines
+end
+
+-- The names of every spell in the class tabs of the player's spellbook
+-- (every skill line but the first, General), or nil when the API is not
+-- there. GetSpellBookItemName gives the name first (verified on Forever
+-- 16.10.2026, UlRemedyForever's Trainer Preview).
+local function ClassSpellNames()
+    local SB = C_SpellBook
+    if not (SB and SB.GetNumSpellBookSkillLines and SB.GetSpellBookSkillLineInfo and SB.GetSpellBookItemName) then return nil end
+    local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player or 0
+    local names, count = {}, 0
+    local ok, n = pcall(SB.GetNumSpellBookSkillLines)
+    n = ok and tonumber(Plain(n)) or 0
+    for line = 2, n do
+        local okInfo, info = pcall(SB.GetSpellBookSkillLineInfo, line)
+        local offset = okInfo and info and tonumber(Plain(info.itemIndexOffset))
+        local items = okInfo and info and tonumber(Plain(info.numSpellBookItems))
+        if offset and items and not (info.isGuild or info.isOffSpec) then
+            for slot = offset + 1, offset + items do
+                local okName, name = pcall(SB.GetSpellBookItemName, slot, bank)
+                name = okName and Plain(name)
+                if type(name) == "string" and name ~= "<secret>" and name ~= "" then
+                    names[name] = true
+                    count = count + 1
+                end
+            end
+        end
+    end
+    return names, count
+end
+
+local function IsClassTrainerForMe()
+    if not UnitExists or not UnitExists("npc") then
+        lastTrainerCheck = "trainer window without an npc unit"
+        return nil
+    end
+    local who = Plain(UnitName("npc"))
+    who = type(who) == "string" and who or "?"
+    local n = GetNumTrainerServices and tonumber(Plain(GetNumTrainerServices())) or 0
+    local known, count = ClassSpellNames()
+    if known then
+        local seen = {}
+        for i = 1, n do
+            local name = Plain(GetTrainerServiceInfo(i))
+            if type(name) == "string" and name ~= "<secret>" then
+                if known[name] then
+                    lastTrainerCheck = who .. ": offers " .. name .. ", a spell in your class tabs, learned"
+                    return true
+                end
+                if #seen < 4 then seen[#seen + 1] = name end
+            end
+        end
+        lastTrainerCheck = who .. ": none of " .. n .. " services (" .. table.concat(seen, ", ")
+            .. ") is among the " .. count .. " spells in your class tabs, not a class trainer"
+        return false
+    end
+    -- Fallback: the NPC's tooltip title.
+    local className = Plain(UnitClass("player"))
+    if type(className) ~= "string" then
+        lastTrainerCheck = who .. ": no spellbook API and class name not readable"
+        return nil
+    end
+    local lines = NpcTitleLines("npc")
+    if #lines == 0 then
+        lastTrainerCheck = who .. ": no spellbook API and no tooltip title readable"
+        return nil
+    end
+    for _, text in ipairs(lines) do
+        if text:find(className, 1, true) then
+            lastTrainerCheck = who .. ": tooltip \"" .. text .. "\" holds " .. className .. ", learned"
+            return true
+        end
+    end
+    lastTrainerCheck = who .. ": tooltip \"" .. table.concat(lines, " / ") .. "\" does not hold " .. className .. ", not a class trainer"
     return false
 end
 
